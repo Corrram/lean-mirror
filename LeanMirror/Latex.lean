@@ -12,6 +12,7 @@ namespace LeanMirror
 structure Vocabulary (Symbol : Ty → Type) where
   key : {a : Ty} → Symbol a → String
   typeLatex : Ty → String
+  binderLatex : Ty → String → String := fun _ name => name
   application : {a : Ty} → Symbol a → List String → String
   noun : {a : Ty} → Symbol (a ⇒ₘ .prop) → String
 
@@ -38,11 +39,14 @@ mutual
     | .integral name body =>
         "\\int_0^1 " ++ render V (name :: vars) body ++ "\\,\\mathrm{d}" ++ name
     | .eq x y => render V vars x ++ " = " ++ render V vars y
+    | .lt x y => render V vars x ++ " < " ++ render V vars y
+    | .ex (a := a) name body => "\\exists " ++ V.binderLatex a name ++ "\\in " ++ V.typeLatex a ++
+        ",\\quad " ++ render V (name :: vars) body
     | .le x y => render V vars x ++ " \\le " ++ render V vars y
     | .and p q => paren (render V vars p ++ " \\;\\land\\; " ++ render V vars q)
     | .imp p q => paren (render V vars p ++ " \\;\\Longrightarrow\\; " ++ render V vars q)
     | .iff p q => paren (render V vars p ++ " \\;\\Longleftrightarrow\\; " ++ render V vars q)
-    | .all (a := a) name body => "\\forall " ++ name ++ "\\in " ++ V.typeLatex a ++
+    | .all (a := a) name body => "\\forall " ++ V.binderLatex a name ++ "\\in " ++ V.typeLatex a ++
         ",\\quad " ++ render V (name :: vars) body
     | .allIn name domain body =>
         "\\forall " ++ name ++ ",\\quad " ++ V.application domain [name] ++

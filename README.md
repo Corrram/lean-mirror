@@ -1,12 +1,42 @@
 # LeanMirror
 
-Readable mathematics with Lean-checked correspondence.
+Readable, executable mathematics with Lean-checked definitions, statements, and proof steps.
 
 LeanMirror is a general Lean add-on for writing precise mathematical statements
 in familiar language and notation, interpreting them as Lean propositions, and
 checking their correspondence with established Lean theorems. It supplies the
 language, its interpretation, presentation tools, and certificate machinery.
 Subject-specific definitions and applications belong in downstream projects.
+
+## Read the analysis companion
+
+The first proof-document example follows selected passages of **Jiří Lebl’s
+[Basic Analysis I, §2.1](https://github.com/jirilebl/ra/blob/e21ec524ca7d54f800c693b948020c188d21d01f/ch-seq-ser.tex)**:
+sequence and convergence definitions, uniqueness of limits, and boundedness of
+convergent sequences. It keeps the positive integer indices, epsilon/2 proof,
+calculation chains, and finite-maximum argument. It does **not** certify the rest
+of the textbook. The original source is pinned, licensed, and included for comparison.
+
+```sh
+lake exe cache get
+npm ci
+python scripts/mirror.py serve examples/analysis
+```
+
+Open `http://127.0.0.1:8766`. The reader compares the original and precise companion,
+links notation to definitions, and lets you inspect proof obligations and mathlib
+counterparts. All assets are local; after building, `build/analysis/index.html`
+also works offline. `python scripts/mirror.py build` generates it without a server.
+
+The editable, executable source is [Analysis.lean](LeanMirror/Examples/Analysis.lean).
+The generated [LaTeX edition](examples/analysis/companion.tex) and
+[document data](examples/analysis/document.mirror.json) come from its checked tree.
+Change the Lean source and rebuild; do not edit generated formulas separately.
+
+This is a working first version of the document engine, not an automatic translator
+for arbitrary articles. The authoring interface is currently Lean plus a controlled
+mathematical language. The browser is a reader, not yet a live proof editor.
+See [authoring and extending documents](docs/documents.md).
 
 ## Classical examples
 
@@ -60,6 +90,10 @@ lake exe cache get
 lake build
 python scripts/classical.py
 python scripts/classical.py --check
+npm ci
+npm test
+python -m unittest discover -s tests
+python scripts/mirror.py check examples/analysis
 ```
 
 The exporter first builds the checked examples. `--check` rejects stale or
@@ -89,6 +123,8 @@ revision recorded in its dependency manifest.
 | `Notation` | Controlled language elaborating into typed expressions |
 | `Latex` | Mathematical rendering and minimal definition closure |
 | `Presentation` | Structured presentation data and definition links |
+| `Document` | Scoped proof trees, node obligations, generic soundness theorem, audited export |
+| `DocumentNotation` | Readable `Fix`, `Assume`, `Choose`, `Have`, `Suffices`, `Conclude` syntax |
 | `Audit` | Extract theorem types and reject nonstandard transitive axioms |
 | `Tests` | Scope, interpretation, certificate, and definition-closure checks |
 | `Examples.Classical` | Independent classical examples connected to mathlib |
@@ -110,7 +146,7 @@ non-proofs and unresolved expression metavariables.
 - Real addition, subtraction, multiplication, fractions, and absolute values.
 - Lebesgue integration over `[0,1]`: `\int_{0}^{1}{u}{body}`.
 - Explicit interval-to-real inclusion: `\real{u}`.
-- Equality, `\le`, `\land`, `\implies`, and `\iff`.
+- Universal/existential quantifiers, strict order `<`, equality, `\le`, `\land`, `\implies`, and `\iff`.
 - `Let x be predicate. statement`, interpreted as universal quantification with
   that predicate as a hypothesis; binders may be nested.
 
@@ -153,4 +189,5 @@ correct, and extracting readable definitions from arbitrary Lean declarations
 are future work. The rejection tests cover selected failure cases; they are not
 a proof of frontend correctness.
 
-LeanMirror is licensed under Apache-2.0.
+LeanMirror’s generic code is licensed under Apache-2.0. The source-derived analysis
+example is CC BY-SA 4.0; see [its attribution and license](examples/analysis/README.md).

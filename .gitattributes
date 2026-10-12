@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Preserve the exact upstream bytes recorded in source manifests.
+examples/**/source/* -text -whitespace
