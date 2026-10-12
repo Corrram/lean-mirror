@@ -33,13 +33,13 @@ For every $\{x_n\}_{n=1}^{\infty}\in \mathbb{R}^{\mathbb{N}}$, for every $x\in \
 \begin{proof}Let $\{x_n\}_{n=1}^{\infty}$.
 Let $x\in \mathbb{R}$.
 Let $y\in \mathbb{R}$.
-Suppose $\left(\hyperlink{def-convergence}{\lim_{n\to\infty} x_n = x} \;\land\; \hyperlink{def-convergence}{\lim_{n\to\infty} x_n = y}\right)$.
+Suppose $\hyperlink{def-convergence}{\lim_{n\to\infty} x_n = x}$; and $\hyperlink{def-convergence}{\lim_{n\to\infty} x_n = y}$.
 It suffices to show that for every $\epsilon\in \mathbb{R}$ satisfying $0 < \epsilon$, $\left|y - x\right| < \epsilon$.
 Let $\epsilon\in \mathbb{R}$.
 Suppose $0 < \epsilon$.
 Choose $M_1\in \mathbb{N}$ such that for every $n\in \mathbb{N}$ satisfying $\hyperlink{def-indices}{n\ge M_1}$, $\left|\hyperlink{def-sequence}{x_{n}} - x\right| < \frac{\epsilon}{2}$.
 Choose $M_2\in \mathbb{N}$ such that for every $n\in \mathbb{N}$ satisfying $\hyperlink{def-indices}{n\ge M_2}$, $\left|\hyperlink{def-sequence}{x_{n}} - y\right| < \frac{\epsilon}{2}$.
-Choose $n\in \mathbb{N}$ such that $\left(\hyperlink{def-indices}{n\ge M_1} \;\land\; \hyperlink{def-indices}{n\ge M_2}\right)$.
+Choose $n\in \mathbb{N}$ such that $\hyperlink{def-indices}{n\ge M_1}$; and $\hyperlink{def-indices}{n\ge M_2}$.
 Estimate:
 \[ \begin{aligned}\left|y - x\right| &= \left|\left(\hyperlink{def-sequence}{x_{n}} - x\right) - \left(\hyperlink{def-sequence}{x_{n}} - y\right)\right| \\ &\le \left|\hyperlink{def-sequence}{x_{n}} - x\right| + \left|\hyperlink{def-sequence}{x_{n}} - y\right| \\ &< \frac{\epsilon}{2} + \frac{\epsilon}{2} \\ &= \epsilon\end{aligned}. \]
 Hence $\left|y - x\right| < \epsilon$.

@@ -28,9 +28,15 @@
        "kind": "forall",
        "body":
        {"premise":
-        {"latex":
+        {"right":
+         {"latex": "\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}",
+          "kind": "formula"},
+         "left":
+         {"latex": "\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x}",
+          "kind": "formula"},
+         "latex":
          "\\left(\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x} \\;\\land\\; \\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}\\right)",
-         "kind": "formula"},
+         "kind": "and"},
         "latex":
         "\\left(\\left(\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x} \\;\\land\\; \\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}\\right) \\;\\Longrightarrow\\; y = x\\right)",
         "kind": "imp",
@@ -121,9 +127,13 @@
               "kind": "choose",
               "goal": "\\left|y - x\\right| < \\epsilon",
               "formula":
-              {"latex":
+              {"right":
+               {"latex": "\\href{#def-indices}{n\\ge M_2}", "kind": "formula"},
+               "left":
+               {"latex": "\\href{#def-indices}{n\\ge M_1}", "kind": "formula"},
+               "latex":
                "\\left(\\href{#def-indices}{n\\ge M_1} \\;\\land\\; \\href{#def-indices}{n\\ge M_2}\\right)",
-               "kind": "formula"},
+               "kind": "and"},
               "claim":
               "\\left(\\href{#def-indices}{n\\ge M_1} \\;\\land\\; \\href{#def-indices}{n\\ge M_2}\\right)",
               "binding": "n"},
@@ -219,9 +229,15 @@
          "\\forall \\epsilon\\in \\mathbb{R},\\quad \\left(0 < \\epsilon \\;\\Longrightarrow\\; \\left|y - x\\right| < \\epsilon\\right)"},
         "kind": "assume",
         "formula":
-        {"latex":
+        {"right":
+         {"latex": "\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}",
+          "kind": "formula"},
+         "left":
+         {"latex": "\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x}",
+          "kind": "formula"},
+         "latex":
          "\\left(\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x} \\;\\land\\; \\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}\\right)",
-         "kind": "formula"},
+         "kind": "and"},
         "claim":
         "\\left(\\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = x} \\;\\land\\; \\href{#def-convergence}{\\lim_{n\\to\\infty} x_n = y}\\right)"},
        "name": "y",

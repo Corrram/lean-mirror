@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {math, sourceHTML, validateDocument, render} from '../reader/render.mjs';
+import {math, sourceHTML, validateDocument, render, formulaProse, proofHTML} from '../reader/render.mjs';
 
 const doc = JSON.parse(await fs.readFile(new URL('../examples/analysis/document.mirror.json',import.meta.url),'utf8'));
 const source = JSON.parse(await fs.readFile(new URL('../examples/analysis/source.json',import.meta.url),'utf8'));
@@ -52,4 +52,13 @@ test('offline reader retains both calculations and verification boundaries',asyn
     assert.doesNotMatch(html,/<(?:script|link)[^>]+(?:src|href)="https?:/);
     await fs.access(path.join(out,'assets/fonts/KaTeX_Main-Regular.woff2'));
   } finally {await fs.rm(out,{recursive:true,force:true});}
+});
+
+test('embeddable reader preserves conjunctions and resolves only declared source references',()=>{
+  const f={kind:'and',left:{kind:'formula',latex:'P'},right:{kind:'formula',latex:'Q'}};
+  assert.equal(formulaProse(f,x=>x),'P; and Q');
+  assert.match(proofHTML({kind:'finish',claim:'P \\land Q',formula:f},x=>x),/Hence P; and Q/);
+  const tex=String.raw`\begin{corollary}[A result] See Theorem~\ref{previous} and \eqref{identity}. \end{corollary}`;
+  assert.match(sourceHTML(tex,math,{previous:'1.1',identity:'4'}),/A result.*Theorem 1.1 and \(4\)/);
+  assert.throws(()=>sourceHTML(tex,math),/Unknown source reference/);
 });

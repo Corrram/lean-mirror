@@ -56,6 +56,7 @@ def clean_math(s):
 def formula_prose(f):
     math=lambda s:'$'+clean_math(s)+'$'
     kind=f['kind']
+    if kind=='and': return formula_prose(f['left'])+'; and '+formula_prose(f['right'])
     if kind=='forall':
         variable=math(f.get('binding',f['name'])+r'\in '+f['type'])
         if f['body']['kind']=='imp':

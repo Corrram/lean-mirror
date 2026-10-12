@@ -36,7 +36,8 @@ function relation(formula) {
 }
 // Natural descriptions are determined by formula constructors. Free prose never
 // enters the proof tree. The original source is displayed in its own column.
-function formulaProse(f, m) {
+export function formulaProse(f, m) {
+  if (f.kind==='and') return formulaProse(f.left,m)+'; and '+formulaProse(f.right,m);
   if (f.kind==='forall') {
     const variable=m(`${f.binding??f.name}\\in ${f.type}`);
     return f.body.kind==='imp' ? `for every ${variable} satisfying ${m(f.body.premise.latex)}, ${formulaProse(f.body.body,m)}` : `for every ${variable}, ${formulaProse(f.body,m)}`;
@@ -54,7 +55,7 @@ function chain(nodes, m) {
   for(const r of rs.slice(1)) rows+=' \\\\ &'+r.operator+' '+r.right;
   return `<div class="calculation"><p>${lead}:</p>${m('\\begin{aligned}'+rows+'\\end{aligned}',true)}<span class="step-count">${nodes.length} checked steps</span></div>`;
 }
-function proofHTML(root, m) {
+export function proofHTML(root, m) {
   let html=''; let n=root;
   while(n) {
     if(n.kind==='have' && relation(n.formula)) {
@@ -99,13 +100,17 @@ function texArgumentCommands(text, command, transform) {
     out+=transform(text.slice(content,end-1)); at=end;
   }
 }
-export function sourceHTML(tex,m) {
+export function sourceHTML(tex,m,references={}) {
   let t=tex.replace(/(?<!\\)%[^\n]*\n/g,'');
   for(const cmd of ['label','glsadd','index']) t=texArgumentCommands(t,cmd,()=> '');
   for(const cmd of ['myindex','emph']) t=texArgumentCommands(t,cmd,s=>s);
   t=texArgumentCommands(t,'footnote',s=>' (Footnote: '+s+')');
-  t=t.replace(/\\qedhere/g,'')
-    .replace(/\\begin\{(?:defn|prop)\}/g,'').replace(/\\end\{(?:defn|prop)\}/g,'\n\n')
+  for(const cmd of ['ref','eqref']) t=texArgumentCommands(t,cmd,key=>{
+    if (!Object.hasOwn(references,key)) throw new Error(`Unknown source reference: ${key}`);
+    return cmd==='eqref' ? '('+references[key]+')' : references[key];
+  });
+  t=t.replace(/~/g,' ').replace(/\\qedhere/g,'')
+    .replace(/\\begin\{(?:defn|prop|theorem|lemma|corollary)\}(?:\[([^\]]*)\])?/g,(_,title)=>title ? title+'. ' : '').replace(/\\end\{(?:defn|prop|theorem|lemma|corollary)\}/g,'\n\n')
     .replace(/\\begin\{proof\}/g,'\n\nProof. ').replace(/\\end\{proof\}/g,' □\n\n');
   const parts=[];const re=/\\begin\{equation\*\}([\s\S]*?)\\end\{equation\*\}|\$([^$]+)\$/g;let at=0;
   const plain=s=>{
