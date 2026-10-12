@@ -178,6 +178,9 @@ def Expr.toDocumentJson {S : Ty → Type} (v : Vocabulary S) {Γ : List Ty}
       ("latex", .str (e.latex v vars))]
   | .imp p q => Lean.Json.mkObj [("kind", .str "imp"), ("premise", p.toDocumentJson v vars),
       ("body", q.toDocumentJson v vars), ("latex", .str (e.latex v vars))]
+  | .iff p q => Lean.Json.mkObj [("kind", .str "iff"),
+      ("left", p.toDocumentJson v vars), ("right", q.toDocumentJson v vars),
+      ("latex", .str (e.latex v vars))]
   | .and p q => Lean.Json.mkObj [("kind", .str "and"),
       ("left", p.toDocumentJson v vars), ("right", q.toDocumentJson v vars),
       ("latex", .str (e.latex v vars))]

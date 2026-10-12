@@ -62,3 +62,7 @@ test('embeddable reader preserves conjunctions and resolves only declared source
   assert.match(sourceHTML(tex,math,{previous:'1.1',identity:'4'}),/A result.*Theorem 1.1 and \(4\)/);
   assert.throws(()=>sourceHTML(tex,math),/Unknown source reference/);
 });
+
+test('equivalence prose preserves both directions',()=>{
+  assert.equal(formulaProse({kind:'iff',left:{kind:'formula',latex:'P'},right:{kind:'formula',latex:'Q'}},x=>x),'P if and only if Q');
+});

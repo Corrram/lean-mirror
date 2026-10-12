@@ -59,4 +59,19 @@ private def isError {α : Type} : Except String α → Bool
 #guard_msgs in
 def invalidProofTarget : Prop := statement_of% (Nat.zero)
 
+
+private def linkVocabulary : Vocabulary TestSymbol where
+  key _ := "term"
+  typeLatex _ := "R"
+  application _ args := "P(" ++ String.intercalate "," args ++ ")"
+  noun _ := "term"
+
+-- HTML forbids nested anchors, including when a coefficient takes a linked object.
+#guard linkVocabulary.withDefinitionLinks.application TestSymbol.nonnegative
+  ["\\href{#def-term}{x}"] == "P(\\href{#def-term}{x})"
+#guard linkVocabulary.withDefinitionLinks.application TestSymbol.nonnegative
+  ["x"] == "\\href{#def-term}{P(x)}"
+#guard ((Expr.eq (Expr.sub (Expr.nat 0) (Expr.nat 1)) (Expr.nat 0) :
+  Expr TestSymbol [] .prop).latex linkVocabulary) == "-1 = 0"
+
 end LeanMirror.Tests

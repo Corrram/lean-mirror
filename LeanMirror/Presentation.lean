@@ -12,7 +12,10 @@ namespace LeanMirror
 def Vocabulary.withDefinitionLinks {Symbol : Ty → Type} (v : Vocabulary Symbol) :
     Vocabulary Symbol :=
   { v with application := fun s args =>
-      "\\href{#def-" ++ v.key s ++ "}{" ++ v.application s args ++ "}" }
+      -- HTML does not permit nested links. Preserve links already present in
+      -- arguments instead of wrapping a second anchor around the application.
+      if args.any (fun arg => (arg.splitOn "\\href{").length > 1) then v.application s args
+      else "\\href{#def-" ++ v.key s ++ "}{" ++ v.application s args ++ "}" }
 
 /-- Preserve the familiar introductory sentence for a restricted universal claim. -/
 def Expr.theoremJson {Symbol : Ty → Type} (v : Vocabulary Symbol)

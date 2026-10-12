@@ -31,6 +31,7 @@ mutual
     | .nat n => toString n
     | .coeUnit x => render V vars x
     | .add x y => paren (render V vars x ++ " + " ++ render V vars y)
+    | .sub (.nat 0) y => "-" ++ render V vars y
     | .sub x y => paren (render V vars x ++ " - " ++ render V vars y)
     | .mul x y => render V vars x ++ "\\," ++ render V vars y
     | .div x y => "\\frac{" ++ render V vars x ++ "}{" ++ render V vars y ++ "}"

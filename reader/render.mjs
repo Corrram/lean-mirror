@@ -37,6 +37,7 @@ function relation(formula) {
 // Natural descriptions are determined by formula constructors. Free prose never
 // enters the proof tree. The original source is displayed in its own column.
 export function formulaProse(f, m) {
+  if (f.kind==='iff') return formulaProse(f.left,m)+' if and only if '+formulaProse(f.right,m);
   if (f.kind==='and') return formulaProse(f.left,m)+'; and '+formulaProse(f.right,m);
   if (f.kind==='forall') {
     const variable=m(`${f.binding??f.name}\\in ${f.type}`);
