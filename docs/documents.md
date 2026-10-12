@@ -96,6 +96,29 @@ without external assets or tracking scripts.
 
 ## Extending the engine
 
+### Preserving a complete article
+
+`reader/article.mjs` supplies a separate, source-preserving LaTeX reader. Its
+blocks retain their exact source text and offsets, with numbered results,
+equations, proof environments, figures, references and bibliography. Unsupported
+content fails the build. Bind compiled evidence by a label or a unique literal
+quotation with `resolveBindings`; missing or ambiguous bindings are errors.
+Notation links resolve to definition labels that actually exist in the source.
+
+`checked_native% someTheorem` exports the **actual type** of a theorem, its
+originating module, direct dependencies and transitive axiom audit. It rejects
+definitions, axioms, `sorry`, and theorems depending on extra axioms. Authors
+cannot replace the extracted proposition with another text at this step.
+
+This evidence overlay is distinct from a checked `Argument` document. A native
+counterpart link certifies its extracted Lean proposition. It does not certify
+the adjacent source prose or prove a statement bridge. Applications must keep
+that distinction visible, retain unverified passages, and supply definition and
+statement bridges plus checked proof documents to complete their verification.
+The reader does not rewrite, shorten, or hide the original article to fit the
+current formal coverage. Article-specific maps and mathematical proofs belong
+in downstream repositories.
+
 Applications can add vocabulary without modifying the engine. New logical
 constructs require interpretation, scope handling, rendering and regression
 checks. New proof nodes also require extending `Valid` and proving the new case
