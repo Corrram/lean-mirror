@@ -1,0 +1,20 @@
+name = "lean-mirror"
+version = "0.1.0"
+description = "Precise mathematical statements, readable LaTeX, and Lean correspondence certificates"
+license = "Apache-2.0"
+defaultTargets = ["LeanMirror"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+warningAsError = true
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+git = "https://github.com/leanprover-community/mathlib4"
+rev = "5ed2965256430c3649e86755f9576b54eca72435"
+
+[[lean_lib]]
+name = "LeanMirror"
+globs = ["LeanMirror.*"]

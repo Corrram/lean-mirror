@@ -1,0 +1,19 @@
+name: LeanMirror
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: leanprover/lean-action@v1
+        with:
+          build: 'true'
+          test: 'false'
+          use-mathlib-cache: 'true'
+      - name: Preserve dependency pins
+        run: git diff --exit-code -- lean-toolchain lakefile.toml lake-manifest.json
