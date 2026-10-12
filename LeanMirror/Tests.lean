@@ -54,4 +54,9 @@ private def isError {α : Type} : Except String α → Bool
 #guard isError (definitionClosure [card "a" ["b"], card "b" ["a"]] ["a"])
 #guard isError (definitionClosure [card "a" [], card "a" []] ["a"])
 
+-- Type extraction must reject mathematical objects that are not proofs.
+/-- error: expected a proof of a proposition -/
+#guard_msgs in
+def invalidProofTarget : Prop := statement_of% (Nat.zero)
+
 end LeanMirror.Tests

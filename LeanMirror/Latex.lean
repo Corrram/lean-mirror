@@ -61,14 +61,20 @@ def Expr.latex {Symbol : Ty → Type} (V : Vocabulary Symbol)
   | .sub x y => render V vars x ++ " - " ++ render V vars y
   | _ => render V vars expr
 
-/-- The controlled phrase has exactly the implication semantics of `allIn`. -/
-def Expr.theoremLatex {Symbol : Ty → Type} (V : Vocabulary Symbol)
+/-- Consecutive binders stay readable as ordinary mathematical sentences. -/
+private def theoremTail {Symbol : Ty → Type} (v : Vocabulary Symbol)
+    {Γ : List Ty} (vars : List String) : Expr Symbol Γ .prop → String
+  | .allIn name domain body =>
+      "Let $" ++ name ++ "$ be a " ++ v.noun domain ++ ". " ++
+      theoremTail v (name :: vars) body
+  | body => "Then\n\\[\n" ++ body.latex v vars ++ ".\n\\]\n"
+
+/-- The controlled phrases have exactly the implication semantics of `allIn`. -/
+def Expr.theoremLatex {Symbol : Ty → Type} (v : Vocabulary Symbol)
     (expr : Expr Symbol [] .prop) : String :=
   match expr with
-  | .allIn name domain body =>
-      "Let $" ++ name ++ "$ be a " ++ V.noun domain ++ ". Then\n\\[\n" ++
-      body.latex V [name] ++ ".\n\\]\n"
-  | _ => "\\[\n" ++ expr.latex V ++ ".\n\\]\n"
+  | .allIn .. => theoremTail v [] expr
+  | _ => "\\[\n" ++ expr.latex v ++ ".\n\\]\n"
 
 structure DefinitionCard where
   key : String

@@ -15,5 +15,10 @@ jobs:
           build: 'true'
           test: 'false'
           use-mathlib-cache: 'true'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check the classical companion
+        run: python scripts/classical.py --check
       - name: Preserve dependency pins
         run: git diff --exit-code -- lean-toolchain lakefile.toml lake-manifest.json

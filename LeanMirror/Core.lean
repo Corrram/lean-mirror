@@ -4,7 +4,7 @@ import Mathlib.MeasureTheory.Constructions.UnitInterval
 /-! # A small, typed language for mathematical statements
 
 The syntax tree, rather than a separately written LaTeX string, is the source of
-both the proposition and its presentation. This module knows no copula theory.
+both the proposition and its presentation. Subject-specific vocabulary is supplied by applications.
 Named base types and typed symbols are supplied by an application.
 -/
 
@@ -92,15 +92,15 @@ noncomputable def Expr.eval {Symbol : Ty → Type} (M : Model Symbol)
   | .all _ body, env => ∀ x, body.eval M (x, env)
   | .allIn _ domain body, env => ∀ x, M.symbol domain x → body.eval M (x, env)
 
-/-- A correspondence and a proof of the target imply the article's proposition. -/
+/-- A correspondence and a proof of the target imply the companion's proposition. -/
 structure Certificate {Symbol : Ty → Type} (M : Model Symbol)
-    (article : Expr Symbol [] .prop) (target : Prop) : Prop where
-  correspondence : article.eval M () ↔ target
+    (statement : Expr Symbol [] .prop) (target : Prop) : Prop where
+  correspondence : statement.eval M () ↔ target
   established : target
 
 theorem Certificate.proved {Symbol : Ty → Type} {M : Model Symbol}
-    {article : Expr Symbol [] .prop} {target : Prop}
-    (certificate : Certificate M article target) : article.eval M () :=
+    {statement : Expr Symbol [] .prop} {target : Prop}
+    (certificate : Certificate M statement target) : statement.eval M () :=
   certificate.correspondence.mpr certificate.established
 
 /-- Bindings used by an expression, excluding proof dependencies. -/
