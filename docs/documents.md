@@ -132,3 +132,10 @@ The engine deliberately uses Lean/Lake/mathlib and KaTeX; its JSON export is a
 small interface that could also feed a Verso frontend.
 
 The original-source article reader also retains nested lists, numerical tables, multiple figure panels, declared theorem counters, appendix headings, and parameterized notation. Equation references count outer numbered rows, including unlabeled rows; nested cases do not create extra equation numbers. Comments retain byte offsets for exact source bindings. This presentation support confers no verification status on a source passage. Unsupported source content still stops the build.
+
+Two-column articles may use a `\twocolumn[{...}]` title and abstract wrapper;
+the reader retains its contents and original source offsets in a single reading
+column. A source containing `\today` requires an explicit ISO `sourceDate`
+when rendered. The reader never substitutes the machine's current date for the
+published version's date. Superscript affiliations and natbib year suffixes are
+retained as text.

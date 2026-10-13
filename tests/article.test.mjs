@@ -147,3 +147,21 @@ w &= 4\label{eq:last}\end{align}
   assert.equal(article.references['eq:first'].number,'1');assert.equal(article.references['eq:last'].number,'3');
   assert.equal(article.references['eq:next'].number,'4');
 });
+
+test('a two-column title wrapper retains its content, source spans and pinned date',()=>{
+  const source=document(String.raw`\twocolumn[{%
+\begin{center}{\LARGE\bfseries A readable title\par}
+An Author\textsuperscript{1}\par
+An affiliation\par\today\end{center}
+\begin{minipage}{.8\textwidth}An abstract with $x^2\ge0$.\end{minipage}
+}]\section{The result}Original body. A citation dated 1980{\natexlab{a}}.`);
+  const article=parseArticle(source);
+  for(const b of articleBlocks(article))assert.equal(source.slice(b.start,b.end),b.latex);
+  assert.throws(()=>renderArticle(article),/pinned sourceDate/);
+  assert.throws(()=>renderArticle(article,{sourceDate:'2026-02-31'}),/pinned sourceDate/);
+  const html=renderArticle(article,{sourceDate:'2026-09-29'});
+  assert.match(html,/A readable title/);assert.match(html,/<sup>1<\/sup>/);
+  assert.match(html,/29 September 2026/);assert.match(html,/An abstract/);assert.match(html,/Original body/);
+  assert.match(html,/1980<span>a<\/span>/);
+  assert.doesNotMatch(html,/\}\]/);
+});

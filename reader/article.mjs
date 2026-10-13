@@ -192,7 +192,21 @@ export function parseArticle(source,bibliography='') {
       const start=at;
       const sectionMatch=text.slice(at).match(/^\\(section|subsection)(\*)?\{/);
       let block;
-      if(text.startsWith('\\appendix',at)) {
+      if(text.startsWith('\\twocolumn',at)) {
+        at+='\\twocolumn'.length;
+        while(/\s/.test(text[at]??'')&&at<text.length)at++;
+        if(text[at]==='[') {
+          const option=optional(text,at),innerStart=at+1;
+          const visible=uncomment(option.value),groupStart=visible.search(/\S/);
+          let body=option.value,offset=innerStart;
+          if(visible[groupStart]==='{') {
+            const group=brace(option.value,groupStart);
+            if(visible.slice(group.end).trim())throw new Error('Unsupported column-title wrapper');
+            body=group.value;offset+=groupStart+1;
+          }
+          block={kind:'wide',children:parse(body,base+offset)};at=option.end;
+        } else block={kind:'layout'};
+      } else if(text.startsWith('\\appendix',at)) {
         at+='\\appendix'.length;appendix=true;section=0;subsection=0;block={kind:'layout'};
       } else if(sectionMatch) {
         const arg=brace(text,at+sectionMatch[0].length-1); at=arg.end;
@@ -283,7 +297,7 @@ export function parseArticle(source,bibliography='') {
   return article;
 }
 
-export function renderArticle(article,{annotations={},evidence={},definitions={},figureURL=x=>x,sourceURL='',proofDetails=()=>'',certificateURL=()=>''}={}) {
+export function renderArticle(article,{annotations={},evidence={},definitions={},figureURL=x=>x,sourceURL='',sourceDate='',proofDetails=()=>'',certificateURL=()=>''}={}) {
   const knownAnchors=new Set(Object.values(article.references).map(r=>r.id));
   for(const d of Object.values(definitions)) {
     if(!article.references[d.label])throw new Error(`Unknown definition label ${d.label}`);
@@ -303,7 +317,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }
   function inline(tex) {
     let out='',at=0;
-    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','itshape':'','upshape':'','em':'','par':'','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'','qedhere':'','newblock':' '};
+    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'','qedhere':'','newblock':' '};
     while(at<tex.length) {
       if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
       if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
@@ -311,6 +325,11 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       if(tex[at]==='\\') {
         const match=tex.slice(at).match(/^\\([A-Za-z]+\*?|[^A-Za-z])/);const cmd=match[1];at+=match[0].length;
         if(Object.hasOwn(simple,cmd)){out+=simple[cmd];continue;}
+        if(cmd==='today'){
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||Number.isNaN(Date.parse(sourceDate+'T00:00:00Z'))||new Date(sourceDate+'T00:00:00Z').toISOString().slice(0,10)!==sourceDate)throw new Error('A pinned sourceDate is required for \\today');
+          out+=escape(new Date(sourceDate+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}));continue;
+        }
+        if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='\\'){out+='<br>';at=optional(tex,at).end;continue;}
         if([';',',','!',' '].includes(cmd)){out+=' ';continue;}
         if(cmd==='quad'||cmd==='qquad'){out+=' ';continue;}
@@ -318,7 +337,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(['Needspace','vspace','hspace','bibliographystyle'].includes(cmd)){at=argument(tex,at).end;continue;}
         if(cmd==='label'){at=argument(tex,at).end;continue;}
         if(cmd==='ref'||cmd==='eqref'){const arg=argument(tex,at),r=article.references[arg.value];if(!r)throw new Error(`Unknown reference ${arg.value}`);out+=`<a href="#${r.id}">${cmd==='eqref'?'('+escape(r.number)+')':escape(r.number)}</a>`;at=arg.end;continue;}
-        if(['emph','textbf','textit','textup','textnormal','texttt','mbox','mathrm','nolinkurl'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(['emph','textbf','textit','textup','textnormal','texttt','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='texorpdfstring'){const first=argument(tex,at),second=argument(tex,first.end);out+=inline(first.value);at=second.end;continue;}
         if(cmd==='href'){const href=argument(tex,at),label=argument(tex,href.end);if(!/^(https?:|mailto:)/.test(href.value))throw new Error('Invalid source hyperlink');out+=`<a href="${escape(href.value)}">${inline(label.value)}</a>`;at=label.end;continue;}
         if(cmd==='url'){const arg=argument(tex,at);if(!/^https?:/.test(arg.value))throw new Error('Invalid source URL');out+=`<a href="${escape(arg.value)}">${escape(arg.value)}</a>`;at=arg.end;continue;}
@@ -371,6 +390,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     if(b.kind==='proof')return `<section class="article-proof" ${attrs}><h4>${b.title?inline(b.title):'Proof.'}</h4>${blocksHTML(b.children)}<span class="article-qed">□</span>${checked(b)}</section>`;
     if(b.kind==='abstract')return `<section class="article-abstract" ${attrs}><h2>Abstract</h2>${blocksHTML(b.children)}</section>`;
     if(b.kind==='center')return `<div class="article-affiliation" ${attrs}>${blocksHTML(b.children)}</div>`;
+    if(b.kind==='wide')return `<div class="article-wide-title" ${attrs}>${blocksHTML(b.children)}</div>`;
     if(['samepage','centering','minipage'].includes(b.kind))return `<div ${attrs}>${blocksHTML(b.children)}</div>`;
     if(b.kind==='figure')return `<figure ${attrs}>${extraAnchors}<div class="article-figure-images" style="display:flex;justify-content:center;gap:8px">${b.images.map((image,i)=>{const width=image.options.match(/width\s*=\s*([.\d]+)\\textwidth/);const percent=width?Math.min(100,Number(width[1])*100):100/b.images.length;return `<img src="${escape(figureURL(image.image))}" alt="Figure ${b.number}${b.images.length>1?' panel '+(i+1):''}" loading="lazy" style="width:${percent}%;min-width:0">`;}).join('')}</div><figcaption><strong>Figure ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
     if(b.kind==='list')return `<${b.style==='bullet'?'ul':'ol'} class="article-list ${b.style}"${b.style==='roman'?' style="list-style-type:lower-roman"':''} ${attrs}>${b.items.map((item,i)=>`<li${b.itemLabels[i]?' style="list-style-type:none"':''}>${b.itemLabels[i]?'<span class="article-item-label">'+inline(b.itemLabels[i])+'</span> ':''}${blocksHTML(item)}</li>`).join('')}</${b.style==='bullet'?'ul':'ol'}>`;
