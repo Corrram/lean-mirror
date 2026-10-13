@@ -199,3 +199,13 @@ $\check L_b$, $\hat{L_b}$, $x^{L_b}$ and $x^\xi$.
   assert.match(html,/href="#article-def-xi"/);
   assert.match(html,/class="accent/);
 });
+
+
+test('dsfont blackboard notation remains readable without editing the original source',()=>{
+  const source=String.raw`\newcommand{\1}{\mathds{1}}\begin{document}
+$\1_{\{x\le y\}}$ and $\mathds{R}$.\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  assert.match(html,/mathvariant="double-struck"/);
+  assert.match(html,/class="katex"/);
+  assert.equal(article.macros['\\1'],String.raw`\mathds{1}`);
+});

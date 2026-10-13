@@ -329,7 +329,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       const def=definitions[key],id=article.references[def.label]?.id??def.id;
       return `{\\href{#${id}}{${symbol}}}`;
     });
-    return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:article.macros,trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
+    return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:{'\\mathds':'\\mathbb{#1}',...article.macros},trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
   }
   function inline(tex) {
     let out='',at=0;
