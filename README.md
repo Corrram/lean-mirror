@@ -191,3 +191,9 @@ a proof of frontend correctness.
 
 LeanMirror’s generic code is licensed under Apache-2.0. The source-derived analysis
 example is CC BY-SA 4.0; see [its attribution and license](examples/analysis/README.md).
+
+The original-article renderer accepts `pageReferences`, a map from source labels
+to positive printed PDF page numbers, for `\pageref`. Inspect the pinned PDF
+when supplying this map: HTML flow does not determine printed pagination.
+Missing or unused page entries fail rendering. Unnumbered proof labels retain
+clickable anchors, and small-cap and underlined prose retain their styling.

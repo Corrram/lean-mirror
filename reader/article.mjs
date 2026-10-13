@@ -319,6 +319,10 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
     }
   }
   referenceWalk(article.blocks);
+  // Proof labels need anchors even without a theorem/equation number.
+  const numberedLabels=new Set(referenceEntries.map(e=>e.label));
+  for(const block of articleBlocks(article))for(const label of block.labels)
+    if(!numberedLabels.has(label))putReference(label,'',block);
   article.referenceOccurrences={};
   article.duplicateReferences=[];
   const usedAnchors=new Set();
@@ -346,7 +350,10 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
   return article;
 }
 
-export function renderArticle(article,{annotations={},evidence={},definitions={},figureURL=x=>x,sourceURL='',sourceDate='',proofDetails=()=>'',certificateURL=()=>''}={}) {
+export function renderArticle(article,{annotations={},evidence={},definitions={},figureURL=x=>x,sourceURL='',sourceDate='',pageReferences={},proofDetails=()=>'',certificateURL=()=>''}={}) {
+  const pageLabels=new Set(articleBlocks(article).flatMap(b=>[...uncomment(b.latex).matchAll(/\\pageref\{([^}]+)\}/g)].map(m=>m[1])));
+  for(const label of pageLabels)if(!article.references[label]||!Number.isSafeInteger(pageReferences[label])||pageReferences[label]<1)throw new Error('Missing pinned page reference '+label);
+  for(const label of Object.keys(pageReferences))if(!pageLabels.has(label))throw new Error('Unused page reference '+label);
   const knownAnchors=new Set(Object.values(article.references).map(r=>r.id));
   for(const d of Object.values(definitions)) {
     if(!article.references[d.label])throw new Error(`Unknown definition label ${d.label}`);
@@ -403,15 +410,16 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
           if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||Number.isNaN(Date.parse(sourceDate+'T00:00:00Z'))||new Date(sourceDate+'T00:00:00Z').toISOString().slice(0,10)!==sourceDate)throw new Error('A pinned sourceDate is required for \\today');
           out+=escape(new Date(sourceDate+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}));continue;
         }
-        if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':cmd==='textsc'?' style="font-variant:small-caps"':cmd==='underline'?' style="text-decoration:underline"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='\\'){out+='<br>';at=optional(tex,at).end;continue;}
         if([';',',','!',' ','\n','\r'].includes(cmd)){out+=' ';continue;}
         if(cmd==='quad'||cmd==='qquad'){out+=' ';continue;}
         if(cmd==='penalty'){const number=tex.slice(at).match(/^[+-]?\d+/);if(!number)throw new Error('Invalid penalty');at+=number[0].length;continue;}
         if(['Needspace','vspace','hspace','bibliographystyle'].includes(cmd)){at=argument(tex,at).end;continue;}
         if(cmd==='label'){at=argument(tex,at).end;continue;}
+        if(cmd==='pageref'){const arg=argument(tex,at),r=article.references[arg.value];out+=`<a href="#${r.id}" title="Page in the published PDF">${pageReferences[arg.value]}</a>`;at=arg.end;continue;}
         if(cmd==='ref'||cmd==='eqref'){const arg=argument(tex,at),r=article.references[arg.value];if(!r)throw new Error(`Unknown reference ${arg.value}`);out+=`<a href="#${r.id}">${cmd==='eqref'?'('+escape(r.number)+')':escape(r.number)}</a>`;at=arg.end;continue;}
-        if(['emph','textbf','textit','textup','textnormal','textsf','texttt','path','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(['emph','textbf','textit','textup','textnormal','textsf','textsc','underline','texttt','path','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':cmd==='textsc'?' style="font-variant:small-caps"':cmd==='underline'?' style="text-decoration:underline"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='bibinfo'){const field=argument(tex,at),body=argument(tex,field.end);out+=inline(body.value);at=body.end;continue;}
         if(cmd==='enquote'){const arg=argument(tex,at);out+='“'+inline(arg.value)+'”';at=arg.end;continue;}
         if(cmd==='texorpdfstring'){const first=argument(tex,at),second=argument(tex,first.end);out+=inline(first.value);at=second.end;continue;}

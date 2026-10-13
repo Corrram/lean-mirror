@@ -387,3 +387,23 @@ test('source figure widths respect both line width and text width fractions',()=
   const source=String.raw`\documentclass{article}\begin{document}\begin{figure}\includegraphics[width=0.72\linewidth]{figure.png}\caption{Original}\end{figure}\end{document}`;
   for(const tex of [source,source.replace('linewidth','textwidth')])assert.match(renderArticle(parseArticle(tex)),/style="width:72%;min-width:0"/);
 });
+
+
+test('unnumbered proof labels retain pinned published page references and small caps',()=>{
+  const source=String.raw`\documentclass{article}\begin{document}See page \pageref{proof:one}. \textsc{CheckAvg}.\begin{proof}\label{proof:one}An argument.\end{proof}\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article,{pageReferences:{'proof:one':18}});
+  assert.equal(article.references['proof:one'].number,'');
+  assert.match(html,/href="#article-proof-one" title="Page in the published PDF">18/);
+  assert.match(html,/id="article-proof-one"/);assert.match(html,/font-variant:small-caps/);
+  assert.throws(()=>renderArticle(article),/Missing pinned page reference/);
+  for(const value of [0,-1,'18',1.5])assert.throws(()=>renderArticle(article,{pageReferences:{'proof:one':value}}),/Missing pinned page/);
+  assert.throws(()=>renderArticle(article,{pageReferences:{'proof:one':18,unknown:2}}),/Unused page/);
+  assert.throws(()=>renderArticle(parseArticle(source.replace('proof:one}.','unknown}.')),{pageReferences:{unknown:18}}),/Missing pinned page/);
+});
+
+
+test('underlined prose retains its proof heading and embedded mathematics',()=>{
+  const source=String.raw`\documentclass{article}\begin{document}\underline{Case $x>0$:} A calculation.\end{document}`;
+  const html=renderArticle(parseArticle(source));
+  assert.match(html,/text-decoration:underline/);assert.match(html,/Case/);assert.match(html,/katex/);assert.match(html,/A calculation/);
+});
