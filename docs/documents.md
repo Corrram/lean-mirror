@@ -130,3 +130,5 @@ case splits, induction, citations attached to each line, an interactive editor,
 and a packaging standard for independent downstream projects remain future work.
 The engine deliberately uses Lean/Lake/mathlib and KaTeX; its JSON export is a
 small interface that could also feed a Verso frontend.
+
+The original-source article reader also retains nested lists, numerical tables, multiple figure panels, declared theorem counters, appendix headings, and parameterized notation. Equation references count outer numbered rows, including unlabeled rows; nested cases do not create extra equation numbers. Comments retain byte offsets for exact source bindings. This presentation support confers no verification status on a source passage. Unsupported source content still stops the build.

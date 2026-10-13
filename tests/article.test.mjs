@@ -57,3 +57,77 @@ test('unsupported content, missing references, and missing evidence fail visibly
   const article=parseArticle(manuscript),annotations=resolveBindings(article,[{label:'thm:positive',declarations:['Missing.proof']}]);
   assert.throws(()=>renderArticle(article,{annotations}),/Missing compiled evidence/);
 });
+
+const document=body=>String.raw`\title{Source fidelity}\begin{document}`+body+String.raw`\end{document}`;
+
+test('comments and inline environments preserve real proof text and source offsets',()=>{
+  const source=document(String.raw`\begin{proof}
+% \begin{invalid}
+A matrix $\begin{pmatrix}1&0\\0&1\end{pmatrix}$ is invertible.
+\begin{comment}\begin{unclosed}This is not published.\end{comment}
+The conclusion remains visible.\end{proof}`);
+  const article=parseArticle(source),html=renderArticle(article);
+  for(const b of articleBlocks(article))assert.equal(source.slice(b.start,b.end),b.latex);
+  assert.match(html,/invertible/);assert.match(html,/conclusion remains visible/);
+  assert.doesNotMatch(html,/not published|unclosed|invalid/);
+});
+
+test('nested lists retain all items and explicit labels without moving source spans',()=>{
+  const source=document(String.raw`\begin{enumerate}[label=(\roman*)]
+\item[(A)] First outer claim.\begin{itemize}\item Inner one.\item Inner two.\end{itemize}
+\item Second outer claim.\end{enumerate}`);
+  const article=parseArticle(source),lists=articleBlocks(article).filter(b=>b.kind==='list');
+  assert.equal(lists.length,2);assert.equal(lists[0].items.length,2);assert.equal(lists[1].items.length,2);
+  for(const b of articleBlocks(article))assert.equal(source.slice(b.start,b.end),b.latex);
+  const html=renderArticle(article);assert.match(html,/>\(A\)<\/span>/);assert.match(html,/Inner two/);assert.match(html,/Second outer claim/);
+});
+
+test('all figure panels and numerical table cells remain visible',()=>{
+  const article=parseArticle(document(String.raw`\begin{figure}
+\includegraphics[width=.32\textwidth]{left.png}\includegraphics[width=.32\textwidth]{right.png}
+\caption{Both panels.}\label{fig:panels}\end{figure}
+\begin{table}\begin{tabular}{lrr}\toprule Name & $x$ & $x^2$\\\midrule
+A & $2$ & $4$\\\multicolumn{3}{c}{A spanning row}\\\bottomrule\end{tabular}
+\caption{Exact entries.}\label{tab:entries}\end{table}`));
+  const html=renderArticle(article);
+  assert.equal((html.match(/<img /g)??[]).length,2);assert.match(html,/left.png/);assert.match(html,/right.png/);
+  assert.match(html,/width:32%/);assert.match(html,/colspan="3"/);assert.match(html,/spanning row/);
+  assert.equal(article.references['fig:panels'].number,'1');assert.equal(article.references['tab:entries'].number,'1');
+});
+
+test('declared theorem counters, parameterized notation and embedded bibliography are retained',()=>{
+  const source=String.raw`\title{Counters}\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}\newtheorem{example}{Example}[subsection]
+\newcommand{\square}[1]{#1^2}\DeclareMathOperator{\rank}{rank}
+\begin{document}\section{First}\subsection{Subsection}
+\begin{theorem}\label{thm:first}$\square{x}\ge0$.\end{theorem}
+\begin{lemma}\label{lem:next}The next result.\end{lemma}
+\begin{example}\label{ex:first}An example.\end{example}
+See \cite{classic}.
+\begin{thebibliography}{1}\bibitem{classic} A. Author. A classic theorem.\end{thebibliography}
+\end{document}`;
+  const article=parseArticle(source);
+  assert.equal(article.references['thm:first'].number,'1.1');assert.equal(article.references['lem:next'].number,'1.2');
+  assert.equal(article.references['ex:first'].number,'1.1.1');
+  assert.match(renderArticle(article),/href="#bib-classic"/);assert.equal(article.bibliography.length,1);
+});
+
+test('starred headings, appendix headings and double-dollar mathematics are not discarded',()=>{
+  const article=parseArticle(document(String.raw`\section{First}Text $$x^2\ge0$$ continues.
+\section*{Acknowledgments}Thanks.\appendix\section{Calculation}$$1+1=2$$`));
+  const headings=article.blocks.filter(b=>b.kind==='heading');
+  assert.deepEqual(headings.map(b=>b.number),['1','','A']);
+  const html=renderArticle(article);assert.match(html,/Acknowledgments/);assert.match(html,/A\. Calculation/);
+  assert.equal((html.match(/class="katex-display"/g)??[]).length,2);
+});
+
+test('numbered outer rows count even without labels; nested cases and notag do not add numbers',()=>{
+  const article=parseArticle(document(String.raw`\begin{align}
+x &= \begin{cases}0&x<0\\1&x\ge0\end{cases}\label{eq:first}\\
+y &= 2\\
+z &= 3\notag\\
+w &= 4\label{eq:last}\end{align}
+\begin{equation}\label{eq:next}1=1\end{equation}`));
+  assert.equal(article.references['eq:first'].number,'1');assert.equal(article.references['eq:last'].number,'3');
+  assert.equal(article.references['eq:next'].number,'4');
+});

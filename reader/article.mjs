@@ -5,7 +5,7 @@ import {escape} from './render.mjs';
 
 const envPattern = /\\(begin|end)\{([^}]+)\}/g;
 const mathEnvs = new Set(['equation','equation*','align','align*','gather','gather*','gathering','multline','multline*']);
-const results = new Set(['theorem','lemma','proposition','corollary','remark','definition']);
+const results = new Set(['theorem','lemma','proposition','corollary','remark','definition','example','optimizationproblem','optimisationproblem']);
 export function brace(text, offset) {
   if(text[offset] !== '{') throw new Error(`Expected brace at ${offset}`);
   let depth=1, at=offset+1;
@@ -31,8 +31,84 @@ function optional(text,at) {
   }
   throw new Error('Unclosed LaTeX option');
 }
-const labels = text => [...text.matchAll(/\\label\{([^}]+)\}/g)].map(m=>m[1]);
+const uncomment = text => text.replace(/(?<!\\)%[^\n]*/g,m=>' '.repeat(m.length));
+const labels = text => [...uncomment(text).matchAll(/\\label\{([^}]+)\}/g)].map(m=>m[1]);
 const anchor = label => 'article-'+label.replace(/[^a-zA-Z0-9-]/g,'-');
+
+// Paragraph boundaries must not split an environment inside inline mathematics.
+function paragraphEnd(text,start) {
+  for(let i=start;i<text.length;i++) {
+    if(text[i]==='%'){const end=text.indexOf('\n',i);if(end<0)return text.length;i=end;}
+    if(text[i]==='$') {
+      const delimiter=text[i+1]==='$'?'$$':'$';
+      const end=text.indexOf(delimiter,i+delimiter.length);
+      if(end<0)throw new Error('Unclosed source mathematics');
+      i=end+delimiter.length-1;continue;
+    }
+    if(text[i]==='\\') {
+      if(text[i+1]==='\\'){i++;continue;}
+      if(text.startsWith('\\(',i)) {
+        const end=text.indexOf('\\)',i+2);if(end<0)throw new Error('Unclosed source mathematics');
+        i=end+1;continue;
+      }
+      if(text.startsWith('\\[',i)||text.startsWith('\\begin{',i)||/^\\(?:sub)?section\*?\{|^\\appendix\b/.test(text.slice(i)))return i;
+      i++;continue;
+    }
+    if(text[i]==='\n'&&/^\n\s*\n/.test(text.slice(i)))return i;
+  }
+  return text.length;
+}
+
+function tableRows(tex) {
+  tex=uncomment(tex).replace(/\\(?:toprule|midrule|bottomrule|hline|addlinespace)(?:\[[^\]]*\])?/g,'').replace(/\\cline\{[^}]+\}/g,'');
+  const rows=[];let row=[],start=0,depth=0,math='';
+  for(let i=0;i<tex.length;i++) {
+    if(tex[i]==='$'){math=math?'':'$';continue;}
+    if(tex.startsWith('\\(',i)){math='\\)';i++;continue;}
+    if(tex.startsWith('\\)',i)){math='';i++;continue;}
+    if(math)continue;
+    if(tex[i]==='{')depth++;
+    if(tex[i]==='}')depth--;
+    if(depth)continue;
+    if(tex[i]==='&'){row.push(tex.slice(start,i).trim());start=i+1;}
+    else if(tex.startsWith('\\\\',i)){
+      row.push(tex.slice(start,i).trim());if(row.some(Boolean))rows.push(row);
+      row=[];i=optional(tex,i+2).end-1;start=i+1;
+    }
+  }
+  const final=tex.slice(start).trim();if(final){row.push(final);rows.push(row);}
+  if(!rows.length)throw new Error('Empty source table');
+  return rows;
+}
+
+function listItems(text) {
+  const starts=[];
+  for(let i=0;i<text.length;i++) {
+    if(text[i]==='%'){const end=text.indexOf('\n',i);if(end<0)break;i=end;continue;}
+    if(text.startsWith('\\begin{',i)){i=environment(text,i).end-1;continue;}
+    if(/^\\item\b/.test(text.slice(i))){const option=optional(text,i+5);starts.push({itemStart:i,start:option.end,label:option.value});i=option.end-1;}
+  }
+  if(!starts.length)throw new Error('Empty source list');
+  return starts.map((item,i)=>({...item,body:text.slice(item.start,starts[i+1]?.itemStart??text.length)}));
+}
+
+function roman(n) {
+  let out='';for(const [value,digit] of [[1000,'m'],[900,'cm'],[500,'d'],[400,'cd'],[100,'c'],[90,'xc'],[50,'l'],[40,'xl'],[10,'x'],[9,'ix'],[5,'v'],[4,'iv'],[1,'i']])while(n>=value){out+=digit;n-=value;}return out;
+}
+
+// A row in a nested cases/aligned environment is part of its outer equation.
+function equationRows(body) {
+  const text=uncomment(body),rows=[];let start=0,depth=0,environments=0;
+  for(let i=0;i<text.length;i++) {
+    if(text.startsWith('\\begin{',i)){const arg=brace(text,i+6);environments++;i=arg.end-1;continue;}
+    if(text.startsWith('\\end{',i)){const arg=brace(text,i+4);environments--;i=arg.end-1;continue;}
+    if(text.startsWith('\\\\',i)&&!depth&&!environments){rows.push(text.slice(start,i));i=optional(text,i+2).end-1;start=i+1;continue;}
+    if(text[i]==='\\'){i++;continue;}
+    if(text[i]==='{')depth++;
+    if(text[i]==='}')depth--;
+  }
+  rows.push(text.slice(start));return rows.filter(row=>row.trim());
+}
 
 export function articleBlocks(article) {
   const all=[];
@@ -54,14 +130,25 @@ export function resolveBindings(article,bindings) {
 }
 
 function environment(text,at) {
+  const visible=uncomment(text);
   envPattern.lastIndex=at;
-  const first=envPattern.exec(text);
+  const first=envPattern.exec(visible);
   if(first?.index!==at || first[1]!=='begin') throw new Error('Expected environment');
   const title=optional(text,envPattern.lastIndex);
   const contentStart=title.end;
+  if(first[2]==='comment') {
+    const close=text.indexOf('\\end{comment}',contentStart);
+    if(close<0)throw new Error('Unclosed comment environment');
+    return {kind:'comment',title:'',body:text.slice(contentStart,close),end:close+13};
+  }
   const stack=[first[2]];
   envPattern.lastIndex=contentStart;
-  for(let token; (token=envPattern.exec(text));) {
+  for(let token; (token=envPattern.exec(visible));) {
+    if(token[1]==='begin'&&token[2]==='comment') {
+      const close=text.indexOf('\\end{comment}',envPattern.lastIndex);
+      if(close<0)throw new Error('Unclosed comment environment');
+      envPattern.lastIndex=close+13;continue;
+    }
     if(token[1]==='begin') stack.push(token[2]);
     else if(stack.pop()!==token[2]) throw new Error(`Mismatched environment: ${token[2]}`);
     if(!stack.length) return {kind:first[2],title:title.value,body:text.slice(contentStart,token.index),end:envPattern.lastIndex};
@@ -73,52 +160,94 @@ export function parseArticle(source,bibliography='') {
   const begin=source.indexOf('\\begin{document}'),end=source.lastIndexOf('\\end{document}');
   if(begin<0||end<begin) throw new Error('Missing article document');
   const macros={};
-  for(const match of source.slice(0,begin).matchAll(/\\newcommand\{(\\[A-Za-z]+|\\\d)\}(?!\[)/g)) {
-    macros[match[1]]=argument(source,match.index+match[0].length).value;
+  const preamble=uncomment(source.slice(0,begin));
+  for(const match of preamble.matchAll(/\\newcommand\{(\\[A-Za-z]+|\\\d)\}/g)) {
+    const count=optional(source,match.index+match[0].length);
+    if(count.value&&!/^[1-9]$/.test(count.value))throw new Error('Unsupported macro arguments');
+    macros[match[1]]=argument(source,count.end).value;
+  }
+  for(const match of preamble.matchAll(/\\DeclareMathOperator(\*)?\{(\\[A-Za-z]+)\}/g))macros[match[2]]='\\operatorname'+(match[1]??'')+'{'+argument(source,match.index+match[0].length).value+'}';
+  const declarations={},counters={};
+  for(const match of preamble.matchAll(/\\newtheorem(\*)?\{([A-Za-z]+)\}(?:\[([A-Za-z]+)\])?\{([^}]+)\}(?:\[([A-Za-z]+)\])?/g))declarations[match[2]]={title:match[4],counter:match[1]?null:match[3]??match[2],within:match[5]};
+  const resultKinds=new Set([...results,...Object.keys(declarations)]);
+  function resultNumber(kind) {
+    const declaration=declarations[kind]??{counter:'theorem',within:'section'};
+    if(declaration.counter===null)return '';
+    const parent=declarations[declaration.counter]??declaration;
+    const within=parent.within??declaration.within;
+    const sectionNumber=appendix?String.fromCharCode(64+section):String(section);
+    const prefix=within==='section'?sectionNumber:within==='subsection'?`${sectionNumber}.${subsection}`:'';
+    counters[declaration.counter]=(counters[declaration.counter]??0)+1;
+    return [prefix,String(counters[declaration.counter])].filter(Boolean).join('.');
   }
   const getMeta=command=>{const m=source.match(new RegExp('\\\\'+command+'\\{'));return m?brace(source,m.index+m[0].length-1).value:'';};
   const article={title:getMeta('title'),author:getMeta('author'),macros,blocks:[],references:{},bibliography:[]};
-  let section=0,subsection=0,result=0,equation=0,figure=0,serial=0;
+  let section=0,subsection=0,equation=0,figure=0,table=0,serial=0,appendix=false;
   function parse(text,base=0) {
     let at=0; const blocks=[];
     while(at<text.length) {
       if(/\s/.test(text[at])) {at++;continue;}
       if(text[at]==='%') {at=text.indexOf('\n',at);if(at<0)break;continue;}
       const start=at;
-      const sectionMatch=text.slice(at).match(/^\\(section|subsection)\{/);
+      const sectionMatch=text.slice(at).match(/^\\(section|subsection)(\*)?\{/);
       let block;
-      if(sectionMatch) {
+      if(text.startsWith('\\appendix',at)) {
+        at+='\\appendix'.length;appendix=true;section=0;subsection=0;block={kind:'layout'};
+      } else if(sectionMatch) {
         const arg=brace(text,at+sectionMatch[0].length-1); at=arg.end;
         const labelMatch=text.slice(at).match(/^\s*\\label\{[^}]+\}/);
         if(labelMatch)at+=labelMatch[0].length;
-        if(sectionMatch[1]==='section'){section++;subsection=0;result=0;}else subsection++;
-        block={kind:'heading',level:sectionMatch[1]==='section'?2:3,number:sectionMatch[1]==='section'?`${section}`:`${section}.${subsection}`,title:arg.value};
+        if(!sectionMatch[2]){if(sectionMatch[1]==='section'){section++;subsection=0;}else subsection++;}
+        for(const [kind,d] of Object.entries(declarations))if(!sectionMatch[2]&&kind===d.counter&&((sectionMatch[1]==='section'&&['section','subsection'].includes(d.within))||(sectionMatch[1]==='subsection'&&d.within==='subsection')))counters[kind]=0;
+        if(!Object.keys(declarations).length&&sectionMatch[1]==='section')counters.theorem=0;
+        const sectionNumber=appendix?String.fromCharCode(64+section):String(section);
+        block={kind:'heading',level:sectionMatch[1]==='section'?2:3,number:sectionMatch[2]?'':sectionMatch[1]==='section'?sectionNumber:`${sectionNumber}.${subsection}`,title:arg.value};
       } else if(text.startsWith('\\begin{',at)) {
         const env=environment(text,at);at=env.end;
         if(mathEnvs.has(env.kind)) {
-          const count=env.kind==='align'?Math.max(1,labels(env.body).length):env.kind.endsWith('*')?0:1;
-          const numbers=Array.from({length:count},()=>String(++equation));
-          block={kind:'math',environment:env.kind,body:env.body,numbers};
-        } else if(results.has(env.kind)) {
+          const rows=['align','gather'].includes(env.kind)?equationRows(env.body):[env.body];
+          const numbers=[],labelNumbers={};
+          for(const row of rows){const numbered=!env.kind.endsWith('*')&&!/\\(?:notag|nonumber)\b/.test(row);const number=numbered?String(++equation):'';if(number)numbers.push(number);for(const label of labels(row))labelNumbers[label]=number;}
+          block={kind:'math',environment:env.kind,body:env.body,numbers,labelNumbers};
+        } else if(resultKinds.has(env.kind)) {
           const prefix=env.body.match(/^\s*(?:\\label\{[^}]+\}\s*)*/)[0];
-          block={kind:env.kind,title:env.title,number:`${section}.${++result}`,ownLabels:labels(prefix),children:parse(env.body.slice(prefix.length),base+start+text.slice(start,at).indexOf(env.body)+prefix.length)};
-        } else if(env.kind==='proof'||env.kind==='abstract'||env.kind==='center') {
+          const name=declarations[env.kind]?.title??env.kind[0].toUpperCase()+env.kind.slice(1);
+          const normalized=name.toLowerCase().replace(/\s/g,'');
+          block={kind:results.has(normalized)?normalized:'result',isResult:true,resultName:name,title:env.title,number:resultNumber(env.kind),ownLabels:labels(prefix),children:parse(env.body.slice(prefix.length),base+start+text.slice(start,at).indexOf(env.body)+prefix.length)};
+        } else if(['proof','abstract','center','samepage','centering'].includes(env.kind)) {
           block={kind:env.kind,title:env.title,children:parse(env.body,base+start+text.slice(start,at).indexOf(env.body))};
-        } else if(env.kind==='figure') {
-          const image=env.body.match(/\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}/);
+        } else if(env.kind==='minipage') {
+          const width=argument(env.body,0);
+          block={kind:'minipage',children:parse(env.body.slice(width.end),base+start+text.slice(start,at).indexOf(env.body)+width.end)};
+        } else if(env.kind==='figure'||env.kind==='figure*') {
+          const images=[...env.body.matchAll(/\\includegraphics(?:\[([^\]]*)\])?\{([^}]+)\}/g)].map(m=>({image:m[2],options:m[1]??''}));
           const caption=env.body.match(/\\caption\{/);
-          if(!image||!caption)throw new Error('Incomplete figure');
-          block={kind:'figure',number:String(++figure),image:image[1],caption:brace(env.body,caption.index+caption[0].length-1).value};
+          if(!images.length||!caption)throw new Error('Incomplete figure');
+          block={kind:'figure',number:String(++figure),image:images[0].image,images,caption:brace(env.body,caption.index+caption[0].length-1).value};
+        } else if(env.kind==='table'||env.kind==='table*') {
+          const tabularStart=env.body.indexOf('\\begin{tabular');
+          if(tabularStart<0)throw new Error('Unsupported table body');
+          const tabular=environment(env.body,tabularStart);
+          let args=argument(tabular.body,0);
+          if(tabular.kind==='tabular*')args=argument(tabular.body,args.end);
+          const caption=env.body.match(/\\caption\{/);
+          block={kind:'table',number:String(++table),rows:tableRows(tabular.body.slice(args.end)),
+            caption:caption?brace(env.body,caption.index+caption[0].length-1).value:''};
+        } else if(env.kind==='comment') {
+          block={kind:'comment'};
         } else if(env.kind==='enumerate'||env.kind==='itemize') {
-          const parts=env.body.split(/\\item\s*/).slice(1);
-          block={kind:'list',style:env.kind==='itemize'?'bullet':env.title.includes('alph')?'alpha':env.title.includes('Q')?'question':'decimal',items:parts.map(p=>parse(p,base+start+text.slice(start,at).indexOf(p)))};
+          const parts=listItems(env.body);
+          block={kind:'list',style:env.kind==='itemize'?'bullet':env.title.includes('alph')?'alpha':env.title.includes('roman')?'roman':env.title.includes('Q')?'question':'decimal',itemLabels:parts.map(p=>p.label),items:parts.map(p=>parse(p.body,base+start+text.slice(start,at).indexOf(env.body)+p.start))};
         } else throw new Error(`Unsupported article environment ${env.kind}`);
+      } else if(text.startsWith('$$',at)) {
+        const close=text.indexOf('$$',at+2);if(close<0)throw new Error('Unclosed display');
+        at=close+2;block={kind:'math',body:text.slice(start+2,close),numbers:[]};
       } else if(text.startsWith('\\[',at)) {
         const close=text.indexOf('\\]',at+2);if(close<0)throw new Error('Unclosed display');
         at=close+2;block={kind:'math',body:text.slice(start+2,close),numbers:[]};
       } else {
-        const next=text.slice(at).search(/\n\s*\n|\\begin\{|\\\[|\\(?:sub)?section\{/);
-        at=next<0?text.length:at+Math.max(next,1);
+        at=paragraphEnd(text,at);
+        if(at===start)throw new Error(`Unrecognized source block at ${base+at}`);
         block={kind:'paragraph',body:text.slice(start,at)};
       }
       block.id=`passage-${++serial}`;
@@ -128,7 +257,9 @@ export function parseArticle(source,bibliography='') {
     }
     return blocks;
   }
-  article.blocks=parse(source.slice(begin+16,end),begin+16);
+  const embeddedBib=source.indexOf('\\begin{thebibliography}',begin+16);
+  if(embeddedBib>=0){bibliography=source.slice(embeddedBib,end);article.blocks=parse(source.slice(begin+16,embeddedBib),begin+16);}
+  else article.blocks=parse(source.slice(begin+16,end),begin+16);
   function putReference(label,number) {
     if(article.references[label])throw new Error(`Duplicate source label ${label}`);
     const id=anchor(label);
@@ -138,9 +269,9 @@ export function parseArticle(source,bibliography='') {
   function referenceWalk(blocks) {
     for(const b of blocks) {
       // Label equations within results separately from their containing result.
-      if(b.kind==='math') b.labels.forEach((l,i)=>putReference(l,b.numbers[i]??''));
+      if(b.kind==='math') b.labels.forEach((l,i)=>putReference(l,b.labelNumbers?.[l]??b.numbers[i]??''));
       else if(b.number) for(const l of b.labels.filter(l=>!b.children?.some(c=>c.labels.includes(l))))putReference(l,b.number);
-      if(b.kind==='list')b.items.forEach((item,i)=>{for(const p of item)if(p.kind==='paragraph')for(const l of p.labels)putReference(l,b.style==='question'?`(Q${i+1})`:b.style==='alpha'?`(${String.fromCharCode(97+i)})`:String(i+1));referenceWalk(item);});
+      if(b.kind==='list')b.items.forEach((item,i)=>{for(const p of item)if(p.kind==='paragraph')for(const l of p.labels)putReference(l,b.style==='question'?`(Q${i+1})`:b.style==='alpha'?`(${String.fromCharCode(97+i)})`:b.style==='roman'?`(${roman(i+1)})`:String(i+1));referenceWalk(item);});
       if(b.children)referenceWalk(b.children);
     }
   }
@@ -157,7 +288,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     if(!article.references[d.label])throw new Error(`Unknown definition label ${d.label}`);
   }
   function m(tex,display=false) {
-    tex=tex.replace(/\\label\{[^}]+\}/g,'');
+    tex=uncomment(tex).replace(/\\label\{[^}]+\}/g,'').replace(/\\allowdisplaybreaks(?:\[[0-4]\])?|\\qedhere\b/g,'');
     if(/\\(?:href|url|html[A-Za-z]*|includegraphics)\b/.test(tex))throw new Error('Source math cannot supply presentation links or HTML');
     // Link lexical symbols; never nest links around their arguments.
     const commandMap=Object.entries(definitions).filter(([key])=>key.startsWith('\\')).sort((a,b)=>b[0].length-a[0].length);
@@ -171,20 +302,22 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }
   function inline(tex) {
     let out='',at=0;
-    const simple={'maketitle':'','centering':'','small':'','itshape':'','upshape':'','par':'','noindent':'','smallskip':'','leavevmode':'','qedhere':'','newblock':' '};
+    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','itshape':'','upshape':'','em':'','par':'','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'','qedhere':'','newblock':' '};
     while(at<tex.length) {
-      if(tex[at]==='$') {const end=tex.indexOf('$',at+1);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+1,end));at=end+1;continue;}
+      if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
+      if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
       if(tex[at]==='%'&&(at===0||tex[at-1]!=='\\')){const end=tex.indexOf('\n',at);at=end<0?tex.length:end+1;continue;}
       if(tex[at]==='\\') {
         const match=tex.slice(at).match(/^\\([A-Za-z]+\*?|[^A-Za-z])/);const cmd=match[1];at+=match[0].length;
         if(Object.hasOwn(simple,cmd)){out+=simple[cmd];continue;}
-        if(cmd==='\\'){out+='<br>';continue;}
+        if(cmd==='\\'){out+='<br>';at=optional(tex,at).end;continue;}
+        if([';',',','!',' '].includes(cmd)){out+=' ';continue;}
         if(cmd==='quad'||cmd==='qquad'){out+=' ';continue;}
         if(cmd==='penalty'){const number=tex.slice(at).match(/^[+-]?\d+/);if(!number)throw new Error('Invalid penalty');at+=number[0].length;continue;}
         if(['Needspace','vspace','hspace','bibliographystyle'].includes(cmd)){at=argument(tex,at).end;continue;}
         if(cmd==='label'){at=argument(tex,at).end;continue;}
         if(cmd==='ref'||cmd==='eqref'){const arg=argument(tex,at),r=article.references[arg.value];if(!r)throw new Error(`Unknown reference ${arg.value}`);out+=`<a href="#${r.id}">${cmd==='eqref'?'('+escape(r.number)+')':escape(r.number)}</a>`;at=arg.end;continue;}
-        if(['emph','textbf','textit','textup','textnormal','mbox','mathrm','nolinkurl'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(['emph','textbf','textit','textup','textnormal','texttt','mbox','mathrm','nolinkurl'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='texorpdfstring'){const first=argument(tex,at),second=argument(tex,first.end);out+=inline(first.value);at=second.end;continue;}
         if(cmd==='href'){const href=argument(tex,at),label=argument(tex,href.end);if(!/^(https?:|mailto:)/.test(href.value))throw new Error('Invalid source hyperlink');out+=`<a href="${escape(href.value)}">${inline(label.value)}</a>`;at=label.end;continue;}
         if(cmd==='url'){const arg=argument(tex,at);if(!/^https?:/.test(arg.value))throw new Error('Invalid source URL');out+=`<a href="${escape(arg.value)}">${escape(arg.value)}</a>`;at=arg.end;continue;}
@@ -216,7 +349,12 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     const contentId=b.labels.find(l=>article.references[l])??b.id;
     const attrs=`id="${contentId===b.id?b.id:anchor(contentId)}" data-passage="${b.id}"`;
     const extraAnchors=b.labels.filter(l=>l!==contentId&&!b.children?.some(c=>c.labels.includes(l))).map(l=>`<span id="${anchor(l)}"></span>`).join('');
-    if(b.kind==='heading')return `<h${b.level} ${attrs}>${b.number}. ${inline(b.title)}</h${b.level}>${extraAnchors}`;
+    if(b.kind==='heading')return `<h${b.level} ${attrs}>${b.number?b.number+'. ':''}${inline(b.title)}</h${b.level}>${extraAnchors}`;
+    if(b.kind==='comment'||b.kind==='layout')return '';
+    if(b.kind==='table')return `<figure class="article-table" ${attrs}>${extraAnchors}<div style="overflow-x:auto"><table>${b.rows.map(row=>`<tr>${row.map(cell=>{
+      if(cell.startsWith('\\multicolumn')){const n=argument(cell,12),format=argument(cell,n.end),body=argument(cell,format.end);if(!/^\d+$/.test(n.value)||Number(n.value)>100)throw new Error('Invalid table span');return `<td colspan="${n.value}">${inline(body.value+cell.slice(body.end))}</td>`;}
+      return `<td>${inline(cell)}</td>`;
+    }).join('')}</tr>`).join('')}</table></div><figcaption><strong>Table ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
     if(b.kind==='paragraph')return `<div class="article-paragraph" ${attrs}><p>${inline(b.body)}</p>${checked(b)}</div>`;
     if(b.kind==='math') {
       let tex=b.body;
@@ -225,14 +363,15 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       if(b.environment?.startsWith('multline'))tex=`\\begin{gathered}${tex}\\end{gathered}`;
       return `<div class="article-equation" ${attrs}>${extraAnchors}<div class="article-math">${m(tex,true)}</div>${b.numbers.length?`<span class="equation-number">(${b.numbers.join(', ')})</span>`:''}${checked(b)}</div>`;
     }
-    if(results.has(b.kind))return `<section class="article-result" data-result-kind="${b.kind}" ${attrs}>${extraAnchors}<h3>${b.kind[0].toUpperCase()+b.kind.slice(1)} ${b.number}${b.title?' ('+inline(b.title)+')':''}.</h3>${blocksHTML(b.children)}${checked(b)}</section>`;
+    if(b.isResult)return `<section class="article-result" data-result-kind="${b.kind}" ${attrs}>${extraAnchors}<h3>${inline(b.resultName)}${b.number?' '+b.number:''}${b.title?' ('+inline(b.title)+')':''}.</h3>${blocksHTML(b.children)}${checked(b)}</section>`;
     if(b.kind==='proof')return `<section class="article-proof" ${attrs}><h4>${b.title?inline(b.title):'Proof.'}</h4>${blocksHTML(b.children)}<span class="article-qed">□</span>${checked(b)}</section>`;
     if(b.kind==='abstract')return `<section class="article-abstract" ${attrs}><h2>Abstract</h2>${blocksHTML(b.children)}</section>`;
     if(b.kind==='center')return `<div class="article-affiliation" ${attrs}>${blocksHTML(b.children)}</div>`;
-    if(b.kind==='figure')return `<figure ${attrs}>${extraAnchors}<img src="${escape(figureURL(b.image))}" alt="Figure ${b.number}" loading="lazy"><figcaption><strong>Figure ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
-    if(b.kind==='list')return `<${b.style==='bullet'?'ul':'ol'} class="article-list ${b.style}" ${attrs}>${b.items.map(item=>`<li>${blocksHTML(item)}</li>`).join('')}</${b.style==='bullet'?'ul':'ol'}>`;
+    if(['samepage','centering','minipage'].includes(b.kind))return `<div ${attrs}>${blocksHTML(b.children)}</div>`;
+    if(b.kind==='figure')return `<figure ${attrs}>${extraAnchors}<div class="article-figure-images" style="display:flex;justify-content:center;gap:8px">${b.images.map((image,i)=>{const width=image.options.match(/width\s*=\s*([.\d]+)\\textwidth/);const percent=width?Math.min(100,Number(width[1])*100):100/b.images.length;return `<img src="${escape(figureURL(image.image))}" alt="Figure ${b.number}${b.images.length>1?' panel '+(i+1):''}" loading="lazy" style="width:${percent}%;min-width:0">`;}).join('')}</div><figcaption><strong>Figure ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
+    if(b.kind==='list')return `<${b.style==='bullet'?'ul':'ol'} class="article-list ${b.style}"${b.style==='roman'?' style="list-style-type:lower-roman"':''} ${attrs}>${b.items.map((item,i)=>`<li${b.itemLabels[i]?' style="list-style-type:none"':''}>${b.itemLabels[i]?'<span class="article-item-label">'+inline(b.itemLabels[i])+'</span> ':''}${blocksHTML(item)}</li>`).join('')}</${b.style==='bullet'?'ul':'ol'}>`;
     throw new Error(`Unsupported block ${b.kind}`);
   }).join('\n');}
-  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number}. ${inline(b.title)}</a></li>`).join('');
+  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${inline(b.title)}</a></li>`).join('');
   return `<article class="mirror-full-article"><header class="article-title"><h1>${inline(article.title)}</h1><p class="article-author">${inline(article.author)}</p><p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
 }
