@@ -1,0 +1,45 @@
+{
+  // LeanMirror: check a LaTeX article with its Lean certificate.
+  // Copy into your project's .vscode/tasks.json and set the inputs below: the Lean
+  // file with #mirror_article (its article pin is updated first, so that Lake
+  // recompiles an edited article), the module with #mirror_certify, and its report.
+  // Findings appear as squiggles in the .tex file and in the Problems panel.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "LeanMirror: check article",
+      "type": "shell",
+      "command": "python .lake/packages/lean-mirror/scripts/tex_diagnostics.py ${input:report} --pin ${input:compiledFile} && lake build ${input:certifyModule} && python .lake/packages/lean-mirror/scripts/tex_diagnostics.py ${input:report} --prose",
+      "group": "build",
+      "presentation": { "reveal": "silent", "clear": true },
+      "problemMatcher": [
+        {
+          "owner": "leanmirror",
+          "source": "LeanMirror",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.+\\.tex):(\\d+):(\\d+):\\s+(error|warning|info):\\s+(.*)$",
+            "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+          }
+        },
+        {
+          "owner": "lean",
+          "source": "Lean",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(?:error|warning): (.+\\.lean):(\\d+):(\\d+): (.*)$",
+            "file": 1, "line": 2, "column": 3, "message": 4
+          }
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    { "id": "certifyModule", "type": "promptString", "description": "Lean module with #mirror_certify",
+      "default": "Papers.Rockel2026ExactBlest.Source.Certified" },
+    { "id": "compiledFile", "type": "promptString", "description": "Lean file with #mirror_article",
+      "default": "Papers/Rockel2026ExactBlest/Source/Compiled.lean" },
+    { "id": "report", "type": "promptString", "description": "The article's .mirror.json",
+      "default": "Papers/Rockel2026ExactBlest/Source/article.mirror.json" }
+  ]
+}

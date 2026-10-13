@@ -31,6 +31,7 @@ jobs:
         run: |
           python scripts/classical.py --check
           python scripts/mirror.py check examples/analysis
+          python scripts/source.py check examples/source
       - name: Build the offline reader
         run: python scripts/mirror.py build examples/analysis
       - uses: actions/upload-artifact@v6

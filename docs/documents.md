@@ -1,5 +1,9 @@
 # Executable mathematical documents
 
+For the source-first frontend, where editable LaTeX/prose itself occurs in the
+certificate, see [source companions](source-companions.md). This page documents
+the earlier tree-authored document engine and the separate article overlay.
+
 LeanMirror’s document engine pairs a typed mathematical vocabulary with a scoped
 proof tree. A tree is accepted only when Lean checks a proof of `Argument.Valid`
 for every node. `Argument.sound` then proves the conclusion computed from the tree.

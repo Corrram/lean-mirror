@@ -8,6 +8,48 @@ checking their correspondence with established Lean theorems. It supplies the
 language, its interpretation, presentation tools, and certificate machinery.
 Subject-specific definitions and applications belong in downstream projects.
 
+## Verify an article in its own LaTeX
+
+`LeanMirror.Tex` compiles an ordinary article — its definitions, statements and
+proof sentences, as written — and verifies it in Lean. Every symbol must be
+defined in the article before it is used, every sentence has one fixed reading,
+and a proof sentence may use only the results it cites. The kernel checks the
+compilation of the file, the readable Lean form of each claim, every
+justification and the final certificate:
+
+```lean
+#mirror_article Foo "article.tex" "fnv1a64:…"   -- kernel-checked compilation (pinned source)
+#mirror_semantics Foo "article.tex"             -- Foo.nu, Foo.claimK, Foo.obligationK, …
+-- your proofs: J.proofK : Foo.obligationK, J.definedI : Foo.wellDefinedI
+#mirror_certify Foo "article.tex" using J      -- Foo.certificate, Foo.verifiedK, article.mirror.json
+```
+
+The single-text reader (`reader/compiled.mjs`) renders the article from that
+source with the status of every sentence; `scripts/tex_diagnostics.py` and
+`editors/vscode/tasks.json` show the same findings in an editor. See
+[articles compiled from LaTeX](docs/tex-articles.md). The exemplar is Corollary
+3.2 of arXiv:2609.27634 in `lean-verifications`
+(`Papers/Rockel2026ExactBlest/Source`).
+
+## Compile a precise companion directly from LaTeX source
+
+The new source frontend checks the actual prose and formula strings in editable
+`.tex` files, including their quantifiers, domains and proof steps. Its Lean
+certificate connects the entire source to the existing theorem and includes a
+kernel-checked compilation equation. Checked definitions are linked from the
+readable statements. Unsupported text stops compilation.
+
+```sh
+npm ci
+python scripts/source.py serve examples/source
+```
+
+Open `http://127.0.0.1:8767`, or run `build` instead of `serve` for an offline
+reader. See [source companions](docs/source-companions.md) for the supported
+precise language, certificate guarantees, and remaining presentation boundaries.
+The earlier tree-authored examples and original-article evidence reader remain
+available below.
+
 ## Read the analysis companion
 
 The first proof-document example follows selected passages of **Jiří Lebl’s
@@ -126,6 +168,7 @@ revision recorded in its dependency manifest.
 | `Document` | Scoped proof trees, node obligations, generic soundness theorem, audited export |
 | `DocumentNotation` | Readable `Fix`, `Assume`, `Choose`, `Have`, `Suffices`, `Conclude` syntax |
 | `Audit` | Extract theorem types and reject nonstandard transitive axioms |
+| `Source` | Compile precise LaTeX/prose, certify source semantics, definitions and proof steps, export exact source |
 | `Tests` | Scope, interpretation, certificate, and definition-closure checks |
 | `Examples.Classical` | Independent classical examples connected to mathlib |
 
@@ -177,17 +220,18 @@ Lean checks the interpreted propositions and proof terms. The allowed axioms
 are `propext`, `Classical.choice`, and `Quot.sound`; unfinished proofs (`sorryAx`)
 and additional axioms are rejected by `#assert_lean_mirror_axioms`.
 
-The parser, notation metadata, primitive glossary, dependency metadata, and
+For the older tree-authored and article-overlay paths, the parser, notation metadata, primitive glossary, dependency metadata, and
 renderers remain inspectable software and author-supplied data. They are not
 proved correct in Lean. Sharing the syntax tree ties the interpretation and
 presentation together, but a misleading notation function is still possible.
 Recognizing the intended mathematics in the displayed statement and definitions
 remains a human judgment.
 
-Automatically interpreting unrestricted prose, proving the parser and renderer
-correct, and extracting readable definitions from arbitrary Lean declarations
-are future work. The rejection tests cover selected failure cases; they are not
-a proof of frontend correctness.
+The source frontend additionally checks a compilation equation for each exact
+source string using total Lean parsing and elaboration functions. Its formal
+semantics are specified by these functions. Automatically understanding
+unrestricted prose, verifying a full TeX/browser renderer, and extracting readable
+definitions from arbitrary Lean declarations remain outside this implementation.
 
 LeanMirror’s generic code is licensed under Apache-2.0. The source-derived analysis
 example is CC BY-SA 4.0; see [its attribution and license](examples/analysis/README.md).
