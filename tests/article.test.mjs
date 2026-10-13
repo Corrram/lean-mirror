@@ -381,3 +381,9 @@ test('shared author footnote marks reuse an existing affiliation explicitly',()=
   for(const mark of ['3','0','x',''])assert.throws(()=>renderArticle(parseArticle(source.replace('[1]','['+mark+']'))),/Unresolved author footnote/);
   assert.throws(()=>renderArticle(parseArticle(String.raw`\documentclass{article}\begin{document}\footnotemark[1]\end{document}`)),/Unresolved author footnote/);
 });
+
+
+test('source figure widths respect both line width and text width fractions',()=>{
+  const source=String.raw`\documentclass{article}\begin{document}\begin{figure}\includegraphics[width=0.72\linewidth]{figure.png}\caption{Original}\end{figure}\end{document}`;
+  for(const tex of [source,source.replace('linewidth','textwidth')])assert.match(renderArticle(parseArticle(tex)),/style="width:72%;min-width:0"/);
+});
