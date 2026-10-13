@@ -308,3 +308,15 @@ test('bibliography metadata preserves printed authors, mathematical titles and l
   assert.match(html,/class="katex"/);
   assert.match(html,/href="https:\/\/doi.org\/10.1\/test"/);
 });
+
+
+test('contents links with theorem references and clickable notation do not nest anchors',()=>{
+  const source=String.raw`\begin{document}\begin{theorem}\label{thm:t}$\xi=\xi$\end{theorem}\begin{equation}\label{eq:xi}\xi=x\end{equation}\section{Proof of Theorem~\ref{thm:t} for $\xi$}\label{sec:proof}Done.\end{document}`;
+  const html=renderArticle(parseArticle(source),{definitions:{'\\xi':{label:'eq:xi'}}});
+  const contents=html.match(/<details class="article-contents">([\s\S]*?)<\/details>/)[1];
+  assert.equal((contents.match(/<a\b/g)||[]).length,1);
+  assert.match(contents,/href="#article-sec-proof"/);
+  assert.match(contents,/Theorem&nbsp;0\.1/);
+  assert.match(contents,/class="katex"/);
+  assert.match(html,/<h2[^>]*>[^]*?<a href="#article-thm-t">0\.1<\/a>/);
+});

@@ -449,6 +449,8 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     if(b.kind==='list')return `<${b.style==='bullet'?'ul':'ol'} class="article-list ${b.style}"${b.style==='roman'?' style="list-style-type:lower-roman"':''} ${attrs}>${b.items.map((item,i)=>`<li${b.itemLabels[i]?' style="list-style-type:none"':''}>${b.itemLabels[i]?'<span class="article-item-label">'+inline(b.itemLabels[i])+'</span> ':''}${blocksHTML(item)}</li>`).join('')}</${b.style==='bullet'?'ul':'ol'}>`;
     throw new Error(`Unsupported block ${b.kind}`);
   }).join('\n');}
-  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${inline(b.title)}</a></li>`).join('');
+  // A contents entry is one link; references inside its title retain their text.
+  const contentsTitle=tex=>inline(tex).replace(/<a\b[^>]*>|<\/a>/g,'').replace(/\shref="[^"]*"/g,'');
+  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${contentsTitle(b.title)}</a></li>`).join('');
   return `<article class="mirror-full-article"><header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+inline(article.author)+'</p>':''}${article.date?'<p class="article-date">'+inline(article.date)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
 }
