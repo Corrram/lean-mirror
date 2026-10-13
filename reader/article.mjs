@@ -241,7 +241,12 @@ export function parseArticle(source,bibliography='') {
           const width=argument(env.body,0);
           block={kind:'minipage',children:parse(env.body.slice(width.end),base+start+text.slice(start,at).indexOf(env.body)+width.end)};
         } else if(env.kind==='figure'||env.kind==='figure*') {
-          const images=[...env.body.matchAll(/\\includegraphics(?:\[([^\]]*)\])?\{([^}]+)\}/g)].map(m=>({image:m[2],options:m[1]??''}));
+          let imageRow=0,imageEnd=0;
+          const images=[...env.body.matchAll(/\\includegraphics(?:\[([^\]]*)\])?\{([^}]+)\}/g)].map(m=>{
+            if(/\\\\/.test(uncomment(env.body.slice(imageEnd,m.index))))imageRow++;
+            imageEnd=m.index+m[0].length;
+            return {image:m[2],options:m[1]??'',row:imageRow};
+          });
           const caption=env.body.match(/\\caption\{/);
           if(!images.length||!caption)throw new Error('Incomplete figure');
           block={kind:'figure',number:String(++figure),image:images[0].image,images,caption:brace(env.body,caption.index+caption[0].length-1).value};
@@ -419,7 +424,10 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     if(b.kind==='center')return `<div class="article-affiliation" ${attrs}>${blocksHTML(b.children)}</div>`;
     if(b.kind==='wide')return `<div class="article-wide-title" ${attrs}>${blocksHTML(b.children)}</div>`;
     if(['samepage','centering','minipage'].includes(b.kind))return `<div ${attrs}>${blocksHTML(b.children)}</div>`;
-    if(b.kind==='figure')return `<figure ${attrs}>${extraAnchors}<div class="article-figure-images" style="display:flex;justify-content:center;gap:8px">${b.images.map((image,i)=>{const width=image.options.match(/width\s*=\s*([.\d]+)\\textwidth/);const percent=width?Math.min(100,Number(width[1])*100):100/b.images.length;return `<img src="${escape(figureURL(image.image))}" alt="Figure ${b.number}${b.images.length>1?' panel '+(i+1):''}" loading="lazy" style="width:${percent}%;min-width:0">`;}).join('')}</div><figcaption><strong>Figure ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
+    if(b.kind==='figure') {
+      const rows=Object.values(Object.groupBy(b.images,image=>image.row??0));
+      return `<figure ${attrs}>${extraAnchors}<div class="article-figure-images">${rows.map(row=>`<div class="article-figure-row" style="display:flex;justify-content:center;gap:8px">${row.map(image=>{const width=image.options.match(/width\s*=\s*([.\d]+)\\textwidth/);const percent=width?Math.min(100,Number(width[1])*100):100/row.length;return `<img src="${escape(figureURL(image.image))}" alt="Figure ${b.number}${b.images.length>1?' panel '+(b.images.indexOf(image)+1):''}" loading="lazy" style="width:${percent}%;min-width:0">`;}).join('')}</div>`).join('')}</div><figcaption><strong>Figure ${b.number}.</strong> ${inline(b.caption)}</figcaption>${checked(b)}</figure>`;
+    }
     if(b.kind==='list')return `<${b.style==='bullet'?'ul':'ol'} class="article-list ${b.style}"${b.style==='roman'?' style="list-style-type:lower-roman"':''} ${attrs}>${b.items.map((item,i)=>`<li${b.itemLabels[i]?' style="list-style-type:none"':''}>${b.itemLabels[i]?'<span class="article-item-label">'+inline(b.itemLabels[i])+'</span> ':''}${blocksHTML(item)}</li>`).join('')}</${b.style==='bullet'?'ul':'ol'}>`;
     throw new Error(`Unsupported block ${b.kind}`);
   }).join('\n');}

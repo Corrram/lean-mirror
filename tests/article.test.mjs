@@ -237,3 +237,20 @@ test('ordinary title pages retain their explicit or source-pinned date',()=>{
   const literal=pinned.replace('\\today','A literal manuscript date');
   assert.match(renderArticle(parseArticle(literal)),/A literal manuscript date/);
 });
+
+
+test('explicit figure row breaks retain the original panel grid',()=>{
+  const source=String.raw`\begin{document}\begin{figure}
+\includegraphics[width=.32\textwidth]{one.png}
+\includegraphics[width=.32\textwidth]{two.png}
+\includegraphics[width=.32\textwidth]{three.png}\vspace{-.5em}\\
+\includegraphics[width=.32\textwidth]{four.png}
+\includegraphics[width=.32\textwidth]{five.png}
+\includegraphics[width=.32\textwidth]{six.png}\\
+\caption{Two rows, in source order.}\end{figure}\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  assert.deepEqual(article.blocks[0].images.map(i=>i.row),[0,0,0,1,1,1]);
+  assert.equal((html.match(/class="article-figure-row"/g)??[]).length,2);
+  assert.equal((html.match(/<img /g)??[]).length,6);
+  assert(html.indexOf('three.png')<html.indexOf('four.png'));
+});
