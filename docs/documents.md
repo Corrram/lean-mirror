@@ -139,3 +139,9 @@ column. A source containing `\today` requires an explicit ISO `sourceDate`
 when rendered. The reader never substitutes the machine's current date for the
 published version's date. Superscript affiliations and natbib year suffixes are
 retained as text.
+
+Equation numbering declared with `\numberwithin{equation}{section}` or
+`subsection` retains its prefixes and resets, including appendix letters.
+Definition links support both macros and ordinary names such as `L_b`, including
+their braced spelling `L_{b}`. The reader never wraps a term's arguments inside
+its definition link.

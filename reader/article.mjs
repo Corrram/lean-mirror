@@ -162,6 +162,7 @@ export function parseArticle(source,bibliography='') {
   if(begin<0||end<begin) throw new Error('Missing article document');
   const macros={};
   const preamble=uncomment(source.slice(0,begin));
+  const equationWithin=preamble.match(/\\numberwithin\{equation\}\{(section|subsection)\}/)?.[1];
   for(const match of preamble.matchAll(/\\newcommand\{(\\[A-Za-z]+|\\\d)\}/g)) {
     const count=optional(source,match.index+match[0].length);
     if(count.value&&!/^[1-9]$/.test(count.value))throw new Error('Unsupported macro arguments');
@@ -184,6 +185,10 @@ export function parseArticle(source,bibliography='') {
   const getMeta=command=>{const m=source.match(new RegExp('\\\\'+command+'\\{'));return m?brace(source,m.index+m[0].length-1).value:'';};
   const article={title:getMeta('title'),author:getMeta('author'),macros,blocks:[],references:{},bibliography:[]};
   let section=0,subsection=0,equation=0,figure=0,table=0,serial=0,appendix=false;
+  function equationNumber(){
+    const prefix=equationWithin?(appendix?String.fromCharCode(64+section):String(section))+(equationWithin==='subsection'?'.'+subsection:''):'';
+    return [prefix,String(++equation)].filter(Boolean).join('.');
+  }
   function parse(text,base=0) {
     let at=0; const blocks=[];
     while(at<text.length) {
@@ -213,6 +218,7 @@ export function parseArticle(source,bibliography='') {
         const labelMatch=text.slice(at).match(/^\s*\\label\{[^}]+\}/);
         if(labelMatch)at+=labelMatch[0].length;
         if(!sectionMatch[2]){if(sectionMatch[1]==='section'){section++;subsection=0;}else subsection++;}
+        if(!sectionMatch[2]&&equationWithin&&(sectionMatch[1]==='section'||equationWithin==='subsection'))equation=0;
         for(const [kind,d] of Object.entries(declarations))if(!sectionMatch[2]&&kind===d.counter&&((sectionMatch[1]==='section'&&['section','subsection'].includes(d.within))||(sectionMatch[1]==='subsection'&&d.within==='subsection')))counters[kind]=0;
         if(!Object.keys(declarations).length&&sectionMatch[1]==='section')counters.theorem=0;
         const sectionNumber=appendix?String.fromCharCode(64+section):String(section);
@@ -222,7 +228,7 @@ export function parseArticle(source,bibliography='') {
         if(mathEnvs.has(env.kind)) {
           const rows=['align','gather'].includes(env.kind)?equationRows(env.body):[env.body];
           const numbers=[],labelNumbers={};
-          for(const row of rows){const numbered=!env.kind.endsWith('*')&&!/\\(?:notag|nonumber)\b/.test(row);const number=numbered?String(++equation):'';if(number)numbers.push(number);for(const label of labels(row))labelNumbers[label]=number;}
+          for(const row of rows){const numbered=!env.kind.endsWith('*')&&!/\\(?:notag|nonumber)\b/.test(row);const number=numbered?equationNumber():'';if(number)numbers.push(number);for(const label of labels(row))labelNumbers[label]=number;}
           block={kind:'math',environment:env.kind,body:env.body,numbers,labelNumbers};
         } else if(resultKinds.has(env.kind)) {
           const prefix=env.body.match(/^\s*(?:\\label\{[^}]+\}\s*)*/)[0];
@@ -306,11 +312,20 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     tex=uncomment(tex).replace(/\\label\{[^}]+\}/g,'').replace(/\\allowdisplaybreaks(?:\[[0-4]\])?|\\qedhere\b/g,'');
     if(/\\(?:href|url|html[A-Za-z]*|includegraphics)\b/.test(tex))throw new Error('Source math cannot supply presentation links or HTML');
     // Link lexical symbols; never nest links around their arguments.
-    const commandMap=Object.entries(definitions).filter(([key])=>key.startsWith('\\')).sort((a,b)=>b[0].length-a[0].length);
-    const re=commandMap.length?new RegExp(commandMap.map(([k])=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g'):null;
+    const commandMap=Object.entries(definitions).sort((a,b)=>b[0].length-a[0].length);
+    const escaped=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const patterns=commandMap.map(([key])=>{
+      if(/^\\[A-Za-z]+$/.test(key))return escaped(key);
+      if(!/^[A-Za-z]+(?:_[A-Za-z0-9]+)?$/.test(key))throw new Error('Unsupported definition notation '+key);
+      const [name,subscript]=key.split('_');
+      return escaped(name)+(subscript?'_(?:'+escaped(subscript)+'|\\{'+escaped(subscript)+'\\})':'');
+    });
+    const re=patterns.length?new RegExp(patterns.join('|'),'g'):null;
     if(re)tex=tex.replace(re,(symbol,offset,input)=>{
       if(/[A-Za-z]/.test(input[offset+symbol.length]??''))return symbol;
-      const def=definitions[symbol],id=article.references[def.label]?.id??def.id;
+      if(!symbol.startsWith('\\')&&/[A-Za-z\\]/.test(input[offset-1]??''))return symbol;
+      const key=symbol.replace(/_\{([A-Za-z0-9]+)\}$/,'_$1');
+      const def=definitions[key],id=article.references[def.label]?.id??def.id;
       return `\\href{#${id}}{${symbol}}`;
     });
     return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:article.macros,trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
@@ -321,6 +336,15 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     while(at<tex.length) {
       if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
       if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
+      if(tex[at]==='{'){
+        const group=brace(tex,at),font=group.value.match(/^\\(LARGE|Large|large|Huge|huge|small|normalsize)\b/);
+        if(font){
+          const sizes={LARGE:'1.5em',Large:'1.3em',large:'1.1em',Huge:'1.8em',huge:'1.7em',small:'.85em',normalsize:'1em'};
+          const declarations=group.value.match(/^(?:\\(?:LARGE|Large|large|Huge|huge|small|normalsize|bfseries|itshape)\s*)+/)?.[0]??'';
+          out+=`<span style="font-size:${sizes[font[1]]}${declarations.includes('\\bfseries')?';font-weight:bold':''}${declarations.includes('\\itshape')?';font-style:italic':''}">${inline(group.value)}</span>`;
+          at=group.end;continue;
+        }
+      }
       if(tex[at]==='%'&&(at===0||tex[at-1]!=='\\')){const end=tex.indexOf('\n',at);at=end<0?tex.length:end+1;continue;}
       if(tex[at]==='\\') {
         const match=tex.slice(at).match(/^\\([A-Za-z]+\*?|[^A-Za-z])/);const cmd=match[1];at+=match[0].length;
@@ -397,5 +421,5 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     throw new Error(`Unsupported block ${b.kind}`);
   }).join('\n');}
   const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${inline(b.title)}</a></li>`).join('');
-  return `<article class="mirror-full-article"><header class="article-title"><h1>${inline(article.title)}</h1><p class="article-author">${inline(article.author)}</p><p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
+  return `<article class="mirror-full-article"><header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+inline(article.author)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
 }

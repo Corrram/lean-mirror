@@ -165,3 +165,22 @@ An affiliation\par\today\end{center}
   assert.match(html,/1980<span>a<\/span>/);
   assert.doesNotMatch(html,/\}\]/);
 });
+
+test('section equation numbering resets and appendix prefixes are preserved',()=>{
+  const source=String.raw`\numberwithin{equation}{section}\begin{document}
+\section{One}\begin{equation}\label{eq:first}1=1\end{equation}
+\section*{Aside}\begin{equation}\label{eq:aside}2=2\end{equation}
+\section{Two}\begin{equation}\label{eq:second}3=3\end{equation}
+\appendix\section{Appendix}\begin{equation}\label{eq:appendix}4=4\end{equation}
+\end{document}`;
+  const article=parseArticle(source);
+  assert.deepEqual(['eq:first','eq:aside','eq:second','eq:appendix'].map(k=>article.references[k].number),['1.1','1.2','2.1','A.1']);
+});
+
+test('ordinary subscripted names link to definitions in both TeX spellings',()=>{
+  const article=parseArticle(document(String.raw`\begin{equation}\label{eq:L}L_b(x)=x\end{equation}
+Use $L_b(u)$ and $L_{b}(v)$; $XL_b$ is a different name.`));
+  const html=renderArticle(article,{definitions:{L_b:{label:'eq:L'}}});
+  assert.equal((html.match(/<a href="#article-eq-L"/g)??[]).length,3);
+  assert.throws(()=>renderArticle(article,{definitions:{'L+X':{label:'eq:L'}}}),/Unsupported definition notation/);
+});
