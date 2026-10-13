@@ -227,3 +227,13 @@ test('quoted proof directions retain their mathematical content and quotation ma
   assert.match(html,/“<em>/);assert.match(html,/<\/em>”/);
   assert.match(html,/An argument/);assert.match(html,/⇒/);
 });
+
+
+test('ordinary title pages retain their explicit or source-pinned date',()=>{
+  const pinned=String.raw`\title{The theorem}\author{An Author}\date{\today}
+\begin{document}\maketitle Original body.\end{document}`;
+  assert.throws(()=>renderArticle(parseArticle(pinned)),/pinned sourceDate/);
+  assert.match(renderArticle(parseArticle(pinned),{sourceDate:'2025-09-08'}),/8 September 2025/);
+  const literal=pinned.replace('\\today','A literal manuscript date');
+  assert.match(renderArticle(parseArticle(literal)),/A literal manuscript date/);
+});

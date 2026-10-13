@@ -183,7 +183,7 @@ export function parseArticle(source,bibliography='') {
     return [prefix,String(counters[declaration.counter])].filter(Boolean).join('.');
   }
   const getMeta=command=>{const m=source.match(new RegExp('\\\\'+command+'\\{'));return m?brace(source,m.index+m[0].length-1).value:'';};
-  const article={title:getMeta('title'),author:getMeta('author'),macros,blocks:[],references:{},bibliography:[]};
+  const article={title:getMeta('title'),author:getMeta('author'),date:getMeta('date'),macros,blocks:[],references:{},bibliography:[]};
   let section=0,subsection=0,equation=0,figure=0,table=0,serial=0,appendix=false;
   function equationNumber(){
     const prefix=equationWithin?(appendix?String.fromCharCode(64+section):String(section))+(equationWithin==='subsection'?'.'+subsection:''):'';
@@ -424,5 +424,5 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     throw new Error(`Unsupported block ${b.kind}`);
   }).join('\n');}
   const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${inline(b.title)}</a></li>`).join('');
-  return `<article class="mirror-full-article"><header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+inline(article.author)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
+  return `<article class="mirror-full-article"><header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+inline(article.author)+'</p>':''}${article.date?'<p class="article-date">'+inline(article.date)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
 }
