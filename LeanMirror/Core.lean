@@ -59,6 +59,7 @@ inductive Expr (Symbol : Ty → Type) : List Ty → Ty → Type where
   | ex {Γ a} : String → Expr Symbol (a :: Γ) .prop → Expr Symbol Γ .prop
   | le {Γ} : Expr Symbol Γ .real → Expr Symbol Γ .real → Expr Symbol Γ .prop
   | and {Γ} : Expr Symbol Γ .prop → Expr Symbol Γ .prop → Expr Symbol Γ .prop
+  | or {Γ} : Expr Symbol Γ .prop → Expr Symbol Γ .prop → Expr Symbol Γ .prop
   | imp {Γ} : Expr Symbol Γ .prop → Expr Symbol Γ .prop → Expr Symbol Γ .prop
   | iff {Γ} : Expr Symbol Γ .prop → Expr Symbol Γ .prop → Expr Symbol Γ .prop
   | all {Γ a} : String → Expr Symbol (a :: Γ) .prop → Expr Symbol Γ .prop
@@ -91,6 +92,7 @@ noncomputable def Expr.eval {Symbol : Ty → Type} (M : Model Symbol)
   | .ex _ body, env => ∃ x, body.eval M (x, env)
   | .le x y, env => x.eval M env ≤ y.eval M env
   | .and p q, env => p.eval M env ∧ q.eval M env
+  | .or p q, env => p.eval M env ∨ q.eval M env
   | .imp p q, env => p.eval M env → q.eval M env
   | .iff p q, env => p.eval M env ↔ q.eval M env
   | .all _ body, env => ∀ x, body.eval M (x, env)
@@ -113,7 +115,7 @@ def Expr.symbols {Symbol : Ty → Type} (key : {a : Ty} → Symbol a → String)
   | .var _ | .nat _ => []
   | .symbol s => [key s]
   | .app x y | .add x y | .sub x y | .mul x y | .div x y |
-      .eq x y | .lt x y | .le x y | .and x y | .imp x y | .iff x y => x.symbols key ++ y.symbols key
+      .eq x y | .lt x y | .le x y | .and x y | .or x y | .imp x y | .iff x y => x.symbols key ++ y.symbols key
   | .coeUnit x | .abs x => x.symbols key
   | .integral _ x | .ex _ x | .all _ x => x.symbols key
   | .allIn _ s x => key s :: x.symbols key

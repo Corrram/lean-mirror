@@ -28,6 +28,7 @@ def rename {S : Ty → Type} {Γ Δ : List Ty} {a : Ty}
   | .lt x y => .lt (rename ρ x) (rename ρ y)
   | .le x y => .le (rename ρ x) (rename ρ y)
   | .and p q => .and (rename ρ p) (rename ρ q)
+  | .or p q => .or (rename ρ p) (rename ρ q)
   | .imp p q => .imp (rename ρ p) (rename ρ q)
   | .iff p q => .iff (rename ρ p) (rename ρ q)
   | .all n p => .all n (rename (liftRen ρ) p)
@@ -56,6 +57,7 @@ theorem eval_rename {S : Ty → Type} (M : Model S) {Γ Δ : List Ty} {a : Ty}
   | «lt» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
   | «le» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
   | «and» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
+  | «or» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
   | «imp» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
   | «iff» x y ihx ihy => simp only [rename, eval, ihx ρ env env' h, ihy ρ env env' h]
   | coeUnit x ih => simp only [rename, eval, ih ρ env env' h]
@@ -182,6 +184,9 @@ def Expr.toDocumentJson {S : Ty → Type} (v : Vocabulary S) {Γ : List Ty}
       ("left", p.toDocumentJson v vars), ("right", q.toDocumentJson v vars),
       ("latex", .str (e.latex v vars))]
   | .and p q => Lean.Json.mkObj [("kind", .str "and"),
+      ("left", p.toDocumentJson v vars), ("right", q.toDocumentJson v vars),
+      ("latex", .str (e.latex v vars))]
+  | .or p q => Lean.Json.mkObj [("kind", .str "or"),
       ("left", p.toDocumentJson v vars), ("right", q.toDocumentJson v vars),
       ("latex", .str (e.latex v vars))]
   | .eq x y => Lean.Json.mkObj [("kind", .str "relation"), ("operator", .str "="),

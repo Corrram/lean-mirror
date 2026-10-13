@@ -98,4 +98,16 @@ theorem unfinished : badStep.Valid testModel (fun _ => True) := by sorry
 def unfinishedExport := checked_document% (v) unfinished
 
 #assert_lean_mirror_axioms correct_valid
+
+-- Disjunction remains sound when a proof introduces a fresh bound variable.
+def eitherSign : Argument TestSymbol [] := [proof|
+  Fix x : real named "x";
+  Have x < 0 \lor 0 \le x;
+  Conclude x < 0 \lor 0 \le x]
+theorem eitherSign_valid : eitherSign.Valid testModel (fun _ => True) := by
+  simp only [eitherSign,Argument.Valid,Expr.eval,Var.get,Ty.denote,Nat.cast_zero]
+  exact ⟨fun env _ => lt_or_ge env.1 0, fun _ h => h.2⟩
+example : eitherSign.goal.eval testModel () :=
+  eitherSign.sound _ _ eitherSign_valid () trivial
+#assert_lean_mirror_axioms eitherSign_valid
 end LeanMirror.DocumentTests

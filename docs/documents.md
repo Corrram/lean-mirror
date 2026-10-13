@@ -145,3 +145,7 @@ Equation numbering declared with `\numberwithin{equation}{section}` or
 Definition links support both macros and ordinary names such as `L_b`, including
 their braced spelling `L_{b}`. The reader never wraps a term's arguments inside
 its definition link.
+
+The controlled formula language supports `\lor` (inclusive logical “or”).
+Conjunction binds more tightly than disjunction, and disjunction more tightly
+than implication. Both LaTeX and readable prose preserve that scope.

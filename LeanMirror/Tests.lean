@@ -74,4 +74,18 @@ private def linkVocabulary : Vocabulary TestSymbol where
 #guard ((Expr.eq (Expr.sub (Expr.nat 0) (Expr.nat 1)) (Expr.nat 0) :
   Expr TestSymbol [] .prop).latex linkVocabulary) == "-1 = 0"
 
+
+-- Conjunction binds more tightly than disjunction; implication binds less tightly.
+def alternatives : Expr TestSymbol [] .prop :=
+  [math| |- 0 = 1 \lor 1 = 1 \land 0 = 0]
+example : alternatives.eval testModel () ↔ ((0:ℝ)=1 ∨ ((1:ℝ)=1 ∧ (0:ℝ)=0)) := by
+  simp only [alternatives,Expr.eval,Nat.cast_zero,Nat.cast_one]
+example : alternatives.eval testModel () := Or.inr ⟨rfl,rfl⟩
+#guard alternatives.latex linkVocabulary ==
+  "\\left(0 = 1 \\;\\lor\\; \\left(1 = 1 \\;\\land\\; 0 = 0\\right)\\right)"
+def implicationAlternatives : Expr TestSymbol [] .prop :=
+  [math| |- 0 = 1 \lor 1 = 1 \implies 0 = 0]
+example : implicationAlternatives.eval testModel () ↔
+    (((0:ℝ)=1 ∨ (1:ℝ)=1) → (0:ℝ)=0) := by
+  simp only [implicationAlternatives,Expr.eval,Nat.cast_zero,Nat.cast_one]
 end LeanMirror.Tests

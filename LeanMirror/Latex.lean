@@ -45,6 +45,7 @@ mutual
         ",\\quad " ++ render V (name :: vars) body
     | .le x y => render V vars x ++ " \\le " ++ render V vars y
     | .and p q => paren (render V vars p ++ " \\;\\land\\; " ++ render V vars q)
+    | .or p q => paren (render V vars p ++ " \\;\\lor\\; " ++ render V vars q)
     | .imp p q => paren (render V vars p ++ " \\;\\Longrightarrow\\; " ++ render V vars q)
     | .iff p q => paren (render V vars p ++ " \\;\\Longleftrightarrow\\; " ++ render V vars q)
     | .all (a := a) name body => "\\forall " ++ V.binderLatex a name ++ "\\in " ++ V.typeLatex a ++

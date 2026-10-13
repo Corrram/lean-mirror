@@ -32,6 +32,7 @@ syntax "Exists " ident " : " ident ". " mirror_math : mirror_math
 syntax:50 mirror_math:51 " = " mirror_math:51 : mirror_math
 syntax:50 mirror_math:51 " \\le " mirror_math:51 : mirror_math
 syntax:35 mirror_math:36 " \\land " mirror_math:35 : mirror_math
+syntax:30 mirror_math:31 " \\lor " mirror_math:30 : mirror_math
 syntax:25 mirror_math:26 " \\implies " mirror_math:25 : mirror_math
 syntax:20 mirror_math:21 " \\iff " mirror_math:20 : mirror_math
 syntax "Let " ident " be " ident ". " mirror_math : mirror_math
@@ -77,6 +78,7 @@ partial def translateMath (vars : List Name) (stx : TSyntax `mirror_math) :
   | `(mirror_math| $x = $y) => `(Expr.eq $(← translateMath vars x) $(← translateMath vars y))
   | `(mirror_math| $x \le $y) => `(Expr.le $(← translateMath vars x) $(← translateMath vars y))
   | `(mirror_math| $x \land $y) => `(Expr.and $(← translateMath vars x) $(← translateMath vars y))
+  | `(mirror_math| $x \lor $y) => `(Expr.or $(← translateMath vars x) $(← translateMath vars y))
   | `(mirror_math| $x \implies $y) => `(Expr.imp $(← translateMath vars x) $(← translateMath vars y))
   | `(mirror_math| $x \iff $y) => `(Expr.iff $(← translateMath vars x) $(← translateMath vars y))
   | `(mirror_math| Let $v:ident be $s:ident. $body) => do

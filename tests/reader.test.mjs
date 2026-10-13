@@ -76,3 +76,12 @@ test('quantifier scope remains explicit on both sides of equivalences and conjun
   const conjunction={kind:'and',left:existence,right:atom('R')};
   assert.equal(formulaProse(conjunction,x=>x),'(there exists C\\in S such that P(C); and Q(C)); and R');
 });
+
+test('disjunction prose preserves conjunction and quantifier scope',()=>{
+  const atom=latex=>({kind:'formula',latex});
+  const either={kind:'or',left:{kind:'and',left:atom('P'),right:atom('Q')},right:atom('R')};
+  assert.equal(formulaProse(either,x=>x),'(P; and Q) or R');
+  assert.equal(formulaProse({kind:'and',left:either,right:atom('S')},x=>x),'((P; and Q) or R); and S');
+  assert.equal(formulaProse({kind:'iff',left:atom('A'),right:either},x=>x),'A if and only if ((P; and Q) or R)');
+  assert.equal(formulaProse({kind:'or',left:{kind:'exists',name:'x',type:'R',body:atom('P(x)')},right:atom('Q')},x=>x),'(there exists x\\in R such that P(x)) or Q');
+});

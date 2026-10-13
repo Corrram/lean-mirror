@@ -38,12 +38,12 @@ function relation(formula) {
 // enters the proof tree. The original source is displayed in its own column.
 export function formulaProse(f, m) {
   if (f.kind==='iff') {
-    const scoped=g=>['forall','exists','imp','iff','and'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
+    const scoped=g=>['forall','exists','imp','iff','and','or'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
     return scoped(f.left)+' if and only if '+scoped(f.right);
   }
-  if (f.kind==='and') {
-    const scoped=g=>['forall','exists','imp','iff'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
-    return scoped(f.left)+'; and '+scoped(f.right);
+  if (f.kind==='and' || f.kind==='or') {
+    const scoped=g=>['forall','exists','imp','iff',f.kind==='and'?'or':'and'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
+    return scoped(f.left)+(f.kind==='or'?' or ':'; and ')+scoped(f.right);
   }
   if (f.kind==='forall') {
     const variable=m(`${f.binding??f.name}\\in ${f.type}`);
