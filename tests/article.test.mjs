@@ -47,6 +47,14 @@ test('a compiled counterexample is visibly distinguished from a source theorem l
   assert.match(html,/class="article-evidence article-refutation"/);assert.match(html,/Printed claim refuted · Open checked correction/);
 });
 
+test('a readable checked proof precedes folded native theorem types',()=>{
+  const article=parseArticle(manuscript);
+  const annotations=resolveBindings(article,[{label:'thm:positive',declarations:['Example.proof']}]);
+  const html=renderArticle(article,{annotations,evidence:{'Example.proof':{declaration:'Example.proof',type:'NativeProposition'}},proofDetails:()=>'<p>Readable checked proof</p>'});
+  assert(html.indexOf('Readable checked proof')<html.indexOf('NativeProposition'));
+  assert.match(html,/class="article-native-types"/);
+});
+
 test('duplicate labels and anchor collisions cannot hide a passage',()=>{
   assert.throws(()=>parseArticle(manuscript.replace('rem:zero','thm:positive')),/Duplicate/);
   assert.throws(()=>parseArticle(manuscript.replace('rem:zero','thm-positive')),/Colliding/);

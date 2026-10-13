@@ -342,10 +342,12 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     const items=annotations[b.id]??b.labels.flatMap(l=>annotations[l]??[]);
     if(!items.length)return '';
     const refutation=items.some(item=>item.role==='refutation');
-    return `<details class="article-evidence${refutation?' article-refutation':''}"><summary>${refutation?'Printed claim refuted · Open checked correction':'Open verification'} (${items.length})</summary>${items.map(item=>{
+    const precise=proofDetails(b,items,m);
+    const native=items.map(item=>{
       const record=evidence[item.declaration];if(!record)throw new Error(`Missing compiled evidence ${item.declaration}`);
       return `<section><h4>${escape(item.title??'Checked mathematical counterpart')}</h4><p><a href="${escape(certificateURL(record))}">${escape(record.declaration)}</a></p><pre><code>${escape(record.type)}</code></pre>${item.note?`<p>${escape(item.note)}</p>`:''}</section>`;
-    }).join('')}${proofDetails(b,items,m)}</details>`;
+    }).join('');
+    return `<details class="article-evidence${refutation?' article-refutation':''}"><summary>${refutation?'Printed claim refuted · Open checked correction':'Open verification'} (${items.length})</summary>${precise}${precise?'<details class="article-native-types"><summary>Inspect the compiled Lean theorem types</summary>'+native+'</details>':native}</details>`;
   }
   function blocksHTML(blocks) {return blocks.map(b=>{
     const contentId=b.labels.find(l=>article.references[l])??b.id;
