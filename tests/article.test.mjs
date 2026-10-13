@@ -407,3 +407,13 @@ test('underlined prose retains its proof heading and embedded mathematics',()=>{
   const html=renderArticle(parseArticle(source));
   assert.match(html,/text-decoration:underline/);assert.match(html,/Case/);assert.match(html,/katex/);assert.match(html,/A calculation/);
 });
+
+
+test('the standard article title uses the inspected pinned date when LaTeX defaults to today',()=>{
+  const source=String.raw`\documentclass{article}\title{A theorem}\begin{document}\maketitle Text.\end{document}`;
+  assert.match(renderArticle(parseArticle(source),{sourceDate:'2026-05-25'}),/class="article-date">25 May 2026/);
+  const empty=source.replace('\\title','\\date{}\\title');
+  assert(!renderArticle(parseArticle(empty),{sourceDate:'2026-05-25'}).includes('class="article-date"'));
+  // Without an inspected source date the reader must not invent today's date.
+  assert(!renderArticle(parseArticle(source)).includes('class="article-date"'));
+});
