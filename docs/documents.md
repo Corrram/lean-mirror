@@ -154,3 +154,12 @@ The original-source reader recognizes braced and unbraced LaTeX macro
 declarations and simple undelimited TeX definitions such as `\def\abs#1{...}`
 and `\def\1{...}`. Unsupported unused or mismatched parameters stop the
 build instead of silently changing how many arguments the source consumes.
+
+
+Repeated source labels fail by default. A downstream article may pass an
+explicit `referenceChoices` object to `parseArticle`: each repeated label maps
+to a one-based source occurrence. All occurrences retain separate anchors and
+the reader displays the selected cross-reference. A binding for a repeated
+label also requires its own `occurrence`; the cross-reference choice does not
+silently choose which mathematical passage receives evidence. Unknown, stale
+and out-of-range choices stop the build. The source is never rewritten.

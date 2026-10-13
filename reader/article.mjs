@@ -121,7 +121,11 @@ export function resolveBindings(article,bindings) {
   const blocks=articleBlocks(article),annotations={};
   for(const binding of bindings) {
     if(binding.role&&!['counterpart','refutation'].includes(binding.role))throw new Error(`Unknown source binding role: ${binding.role}`);
-    const candidates=blocks.filter(b=>binding.label?b.labels.includes(binding.label):b.kind===binding.kind&&b.latex.includes(binding.quote));
+    let candidates=blocks.filter(b=>binding.label?b.labels.includes(binding.label):b.kind===binding.kind&&b.latex.includes(binding.quote));
+    if(binding.occurrence!==undefined){
+      if(!binding.label||!Number.isSafeInteger(binding.occurrence)||binding.occurrence<1)throw new Error('Invalid binding occurrence');
+      candidates=candidates.slice().sort((a,b)=>a.start-b.start).filter((_,i)=>i===binding.occurrence-1);
+    }
     if(candidates.length!==1)throw new Error(`Source binding must match exactly once: ${binding.label??binding.quote} (${candidates.length})`);
     const b=candidates[0];
     annotations[b.id]??=[];
@@ -157,7 +161,7 @@ function environment(text,at) {
   throw new Error(`Unclosed environment ${first[2]}`);
 }
 
-export function parseArticle(source,bibliography='') {
+export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
   const begin=source.indexOf('\\begin{document}'),end=source.lastIndexOf('\\end{document}');
   if(begin<0||end<begin) throw new Error('Missing article document');
   const macros={};
@@ -303,22 +307,39 @@ export function parseArticle(source,bibliography='') {
   const embeddedBib=source.indexOf('\\begin{thebibliography}',begin+16);
   if(embeddedBib>=0){bibliography=source.slice(embeddedBib,end);article.blocks=parse(source.slice(begin+16,embeddedBib),begin+16);}
   else article.blocks=parse(source.slice(begin+16,end),begin+16);
-  function putReference(label,number) {
-    if(article.references[label])throw new Error(`Duplicate source label ${label}`);
-    const id=anchor(label);
-    if(Object.values(article.references).some(r=>r.id===id))throw new Error(`Colliding source anchor ${label}`);
-    article.references[label]={id,number};
-  }
+  const referenceEntries=[];
+  function putReference(label,number,block) {referenceEntries.push({label,number,block});}
   function referenceWalk(blocks) {
     for(const b of blocks) {
       // Label equations within results separately from their containing result.
-      if(b.kind==='math') b.labels.forEach((l,i)=>putReference(l,b.labelNumbers?.[l]??b.numbers[i]??''));
-      else if(b.number) for(const l of b.labels.filter(l=>!b.children?.some(c=>c.labels.includes(l))))putReference(l,b.number);
-      if(b.kind==='list')b.items.forEach((item,i)=>{for(const p of item)if(p.kind==='paragraph')for(const l of p.labels)putReference(l,b.style==='question'?`(Q${i+1})`:b.style==='alpha'?`(${String.fromCharCode(97+i)})`:b.style==='roman'?`(${roman(i+1)})`:String(i+1));referenceWalk(item);});
+      if(b.kind==='math') b.labels.forEach((l,i)=>putReference(l,b.labelNumbers?.[l]??b.numbers[i]??'',b));
+      else if(b.number) for(const l of b.labels.filter(l=>!b.children?.some(c=>c.labels.includes(l))))putReference(l,b.number,b);
+      if(b.kind==='list')b.items.forEach((item,i)=>{for(const p of item)if(p.kind==='paragraph')for(const l of p.labels)putReference(l,b.style==='question'?`(Q${i+1})`:b.style==='alpha'?`(${String.fromCharCode(97+i)})`:b.style==='roman'?`(${roman(i+1)})`:String(i+1),p);referenceWalk(item);});
       if(b.children)referenceWalk(b.children);
     }
   }
   referenceWalk(article.blocks);
+  article.referenceOccurrences={};
+  article.duplicateReferences=[];
+  const usedAnchors=new Set();
+  for(const [label,entries] of Object.entries(Object.groupBy(referenceEntries,e=>e.label))){
+    const choice=referenceChoices[label];
+    if(new Set(entries.map(e=>e.block.id)).size!==entries.length)throw new Error(`Repeated label within one source block ${label}`);
+    if(entries.length>1 && choice===undefined)throw new Error(`Duplicate source label ${label}: choose an explicit reference occurrence`);
+    if(choice!==undefined && (entries.length<2||!Number.isSafeInteger(choice)||choice<1||choice>entries.length))throw new Error(`Invalid reference occurrence for ${label}`);
+    const occurrences=entries.map((entry,i)=>{
+      const id=anchor(label)+(entries.length>1?`-occurrence-${i+1}`:'');
+      if(usedAnchors.has(id))throw new Error(`Colliding source anchor ${label}`);
+      usedAnchors.add(id);
+      entry.block.referenceIds??={};entry.block.referenceIds[label]=id;
+      return {id,number:entry.number,blockId:entry.block.id,occurrence:i+1};
+    });
+    article.referenceOccurrences[label]=occurrences;
+    article.references[label]=occurrences[(choice??1)-1];
+    if(entries.length>1)article.duplicateReferences.push({label,choice,occurrences});
+  }
+  for(const label of Object.keys(referenceChoices))if(!article.referenceOccurrences[label])throw new Error(`Unknown reference choice ${label}`);
+
   const bibStart=/\\bibitem(?:\[[\s\S]*?\])?\{([^}]+)\}/g;
   const matches=[...bibliography.matchAll(bibStart)];
   article.bibliography=matches.map((m,i)=>({key:m[1],number:i+1,body:bibliography.slice(m.index+m[0].length,matches[i+1]?.index??bibliography.length).replace(/\\end\{thebibliography\}[\s\S]*/,'')}));
@@ -354,9 +375,10 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     });
     return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:{'\\mathds':'\\mathbb{#1}',...article.macros},trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
   }
+  const authorNotes=[];let inAuthor=false;
   function inline(tex) {
     let out='',at=0;
-    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'', 'qedhere':'','newblock':' ','DOIprefix':'doi:','URLprefix':'URL: ','ArXivprefix':'arXiv:','newpage':'<span class="article-page-break" style="break-after:page"></span>','clearpage':'<span class="article-page-break" style="break-after:page"></span>' };
+    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'', 'qedhere':'','newblock':' ','DOIprefix':'doi:','URLprefix':'URL: ','ArXivprefix':'arXiv:','newpage':'<span class="article-page-break" style="break-after:page"></span>','ss':'ß','SS':'ẞ','ae':'æ','AE':'Æ','oe':'œ','OE':'Œ','o':'ø','O':'Ø','l':'ł','L':'Ł','clearpage':'<span class="article-page-break" style="break-after:page"></span>' };
     while(at<tex.length) {
       if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
       if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
@@ -372,14 +394,14 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       if(tex[at]==='%'&&(at===0||tex[at-1]!=='\\')){const end=tex.indexOf('\n',at);at=end<0?tex.length:end+1;continue;}
       if(tex[at]==='\\') {
         const match=tex.slice(at).match(/^\\([A-Za-z]+\*?|[^A-Za-z])/);const cmd=match[1];at+=match[0].length;
-        if(Object.hasOwn(simple,cmd)){out+=simple[cmd];continue;}
+        if(Object.hasOwn(simple,cmd)){out+=simple[cmd];if(['ss','SS','ae','AE','oe','OE','o','O','l','L'].includes(cmd))while(/\s/.test(tex[at]??'')&&at<tex.length)at++;continue;}
         if(cmd==='today'){
           if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||Number.isNaN(Date.parse(sourceDate+'T00:00:00Z'))||new Date(sourceDate+'T00:00:00Z').toISOString().slice(0,10)!==sourceDate)throw new Error('A pinned sourceDate is required for \\today');
           out+=escape(new Date(sourceDate+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}));continue;
         }
         if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='\\'){out+='<br>';at=optional(tex,at).end;continue;}
-        if([';',',','!',' '].includes(cmd)){out+=' ';continue;}
+        if([';',',','!',' ','\n','\r'].includes(cmd)){out+=' ';continue;}
         if(cmd==='quad'||cmd==='qquad'){out+=' ';continue;}
         if(cmd==='penalty'){const number=tex.slice(at).match(/^[+-]?\d+/);if(!number)throw new Error('Invalid penalty');at+=number[0].length;continue;}
         if(['Needspace','vspace','hspace','bibliographystyle'].includes(cmd)){at=argument(tex,at).end;continue;}
@@ -395,6 +417,12 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(cmd.startsWith('cite')){const first=optional(tex,at),second=optional(tex,first.end),arg=argument(tex,second.end);out+='['+arg.value.split(',').map(key=>{const b=article.bibliography.find(b=>b.key===key.trim());if(!b)throw new Error(`Missing citation ${key}`);return `<a href="#bib-${escape(b.key)}">${b.number}</a>`;}).join(', ')+(first.value?', '+inline(first.value):'')+(second.value?', '+inline(second.value):'')+']';at=arg.end;continue;}
         if(cmd==='bibliography'){at=argument(tex,at).end;continue;}
         if(cmd==='keywords'){const arg=argument(tex,at);out+='<strong>Keywords:</strong> '+inline(arg.value);at=arg.end;continue;}
+        if(cmd==='thanks'){
+          if(!inAuthor)throw new Error('Author note outside the author field');
+          const arg=argument(tex,at),marker=['*','†','‡','§','¶','‖'][authorNotes.length]??String(authorNotes.length+1);
+          const note={id:'article-author-note-'+(authorNotes.length+1),marker,body:arg.value};
+          authorNotes.push(note);out+=`<sup><a href="#${note.id}">${marker}</a></sup>`;at=arg.end;continue;
+        }
         if(cmd==='footnote'){const arg=argument(tex,at);out+=`<span class="article-footnote">(${inline(arg.value)})</span>`;at=arg.end;continue;}
         if(['%','&','_','#','$','{','}'].includes(cmd)){out+=escape(cmd);continue;}
         if(['\'','`','"','^','~','c','v','H'].includes(cmd)){const arg=tex[at]==='{'?brace(tex,at):{value:tex[at],end:at+1};const marks={"'":'\u0301','`':'\u0300','"':'\u0308','^':'\u0302','~':'\u0303',c:'\u0327',v:'\u030c',H:'\u030b'};out+=escape((arg.value+marks[cmd]).normalize('NFC'));at=arg.end;continue;}
@@ -420,8 +448,8 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }
   function blocksHTML(blocks) {return blocks.map(b=>{
     const contentId=b.labels.find(l=>article.references[l])??b.id;
-    const attrs=`id="${contentId===b.id?b.id:anchor(contentId)}" data-passage="${b.id}"`;
-    const extraAnchors=b.labels.filter(l=>l!==contentId&&!b.children?.some(c=>c.labels.includes(l))).map(l=>`<span id="${anchor(l)}"></span>`).join('');
+    const attrs=`id="${contentId===b.id?b.id:(b.referenceIds?.[contentId]??anchor(contentId))}" data-passage="${b.id}"`;
+    const extraAnchors=b.labels.filter(l=>l!==contentId&&!b.children?.some(c=>c.labels.includes(l))).map(l=>`<span id="${b.referenceIds?.[l]??anchor(l)}"></span>`).join('');
     if(b.kind==='heading')return `<h${b.level} ${attrs}>${b.number?b.number+'. ':''}${inline(b.title)}</h${b.level}>${extraAnchors}`;
     if(b.kind==='comment'||b.kind==='layout')return '';
     if(b.kind==='table')return `<figure class="article-table" ${attrs}>${extraAnchors}<div style="overflow-x:auto"><table>${b.rows.map(row=>`<tr>${row.map(cell=>{
@@ -451,6 +479,9 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }).join('\n');}
   // A contents entry is one link; references inside its title retain their text.
   const contentsTitle=tex=>inline(tex).replace(/<a\b[^>]*>|<\/a>/g,'').replace(/\shref="[^"]*"/g,'');
-  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?anchor(b.labels[0]):b.id}">${b.number?b.number+'. ':''}${contentsTitle(b.title)}</a></li>`).join('');
-  return `<article class="mirror-full-article"><header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+inline(article.author)+'</p>':''}${article.date?'<p class="article-date">'+inline(article.date)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header><details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
+  const toc=article.blocks.filter(b=>b.kind==='heading').map(b=>`<li class="level-${b.level}"><a href="#${b.labels[0]?(b.referenceIds?.[b.labels[0]]??anchor(b.labels[0])):b.id}">${b.number?b.number+'. ':''}${contentsTitle(b.title)}</a></li>`).join('');
+  inAuthor=true;const authorHTML=inline(article.author);inAuthor=false;
+  const authorNoteHTML=authorNotes.map(n=>`<p id="${n.id}"><sup>${n.marker}</sup> ${inline(n.body)}</p>`).join('');
+  const referenceNotice=article.duplicateReferences.length?`<aside class="article-reference-notice"><strong>Source cross-reference notice.</strong> ${article.duplicateReferences.map(d=>`The source label <code>${escape(d.label)}</code> occurs ${d.occurrences.length} times. Cross-references explicitly use occurrence ${d.choice}, numbered (${escape(d.occurrences[d.choice-1].number)}); verification links distinguish each occurrence.`).join(' ')}</aside>`:'';
+  return `<article class="mirror-full-article">${referenceNotice}<header class="article-title">${article.title?'<h1>'+inline(article.title)+'</h1>':''}${article.author?'<p class="article-author">'+authorHTML+'</p>':''}${article.date?'<p class="article-date">'+inline(article.date)+'</p>':''}<p><a href="${escape(sourceURL)}">Published source</a> · <a href="#article-verification">Verification map</a></p></header>${authorNoteHTML?'<div class="article-affiliation">'+authorNoteHTML+'</div>':''}<details class="article-contents"><summary>Contents</summary><ol>${toc}</ol></details>${blocksHTML(article.blocks)}<section class="article-bibliography"><h2>References</h2><ol>${article.bibliography.map(b=>`<li id="bib-${escape(b.key)}">${inline(b.body)}</li>`).join('')}</ol></section></article>`;
 }

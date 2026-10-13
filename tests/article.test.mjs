@@ -320,3 +320,37 @@ test('contents links with theorem references and clickable notation do not nest 
   assert.match(contents,/class="katex"/);
   assert.match(html,/<h2[^>]*>[^]*?<a href="#article-thm-t">0\.1<\/a>/);
 });
+
+
+test('duplicate source labels require explicit reference choices and separately bindable occurrences',()=>{
+  const source=String.raw`\begin{document}\begin{equation}\label{eq:same}x=x\end{equation}\begin{equation}\label{eq:same}y=y\end{equation}See \eqref{eq:same}.\end{document}`;
+  assert.throws(()=>parseArticle(source),/Duplicate source label/);
+  for(const choice of [0,3,1.5,'2'])assert.throws(()=>parseArticle(source,'',{referenceChoices:{'eq:same':choice}}),/Invalid reference occurrence/);
+  assert.throws(()=>parseArticle(source,'',{referenceChoices:{'eq:missing':1,'eq:same':2}}),/Unknown reference choice/);
+  const article=parseArticle(source,'',{referenceChoices:{'eq:same':2}}),html=renderArticle(article);
+  assert.equal(article.references['eq:same'].number,'2');
+  assert.equal(article.referenceOccurrences['eq:same'][0].number,'1');
+  assert.match(html,/id="article-eq-same-occurrence-1"/);
+  assert.match(html,/id="article-eq-same-occurrence-2"/);
+  assert.match(html,/href="#article-eq-same-occurrence-2">\(2\)<\/a>/);
+  assert.match(html,/Source cross-reference notice/);
+  assert.throws(()=>resolveBindings(article,[{label:'eq:same',declarations:['A']}]),/exactly once/);
+  const blocks=articleBlocks(article),bindings=resolveBindings(article,[{label:'eq:same',occurrence:1,declarations:['A']},{label:'eq:same',occurrence:2,declarations:['B']}]);
+  assert.deepEqual(bindings[blocks[0].id].map(b=>b.declaration),['A']);
+  assert.deepEqual(bindings[blocks[1].id].map(b=>b.declaration),['B']);
+  assert.throws(()=>resolveBindings(article,[{label:'eq:same',occurrence:3,declarations:['A']}]),/exactly once/);
+  assert.throws(()=>resolveBindings(article,[{kind:'math',quote:'x=x',occurrence:1,declarations:['A']}]),/Invalid binding occurrence/);
+  for(const block of blocks)assert.equal(source.slice(block.start,block.end),block.latex);
+});
+
+
+test('author thanks preserve affiliation notes and native letters',()=>{
+  const source=String.raw`\author{A\thanks{Universit\"at A, Stra\ss e 1.}\and B\thanks{Universit\"at B.}}\begin{document}\maketitle Text.\end{document}`;
+  const html=renderArticle(parseArticle(source));
+  assert.match(html,/href="#article-author-note-1">\*<\/a>/);
+  assert.match(html,/href="#article-author-note-2">†<\/a>/);
+  assert.match(html,/Universität A, Straße 1\./);
+  assert.match(html,/Universität B\./);
+  assert(html.indexOf('article-author-note-1"')<html.indexOf('class="article-contents"'));
+  assert.throws(()=>renderArticle(parseArticle(document(String.raw`\thanks{Unplaced note}`))),/outside the author field/);
+});
