@@ -66,3 +66,13 @@ test('embeddable reader preserves conjunctions and resolves only declared source
 test('equivalence prose preserves both directions',()=>{
   assert.equal(formulaProse({kind:'iff',left:{kind:'formula',latex:'P'},right:{kind:'formula',latex:'Q'}},x=>x),'P if and only if Q');
 });
+
+
+test('quantifier scope remains explicit on both sides of equivalences and conjunctions',()=>{
+  const atom=latex=>({kind:'relation',latex});
+  const existence={kind:'exists',name:'C',type:'S',body:{kind:'and',left:atom('P(C)'),right:atom('Q(C)')}};
+  const identity={kind:'iff',left:existence,right:{kind:'and',left:atom('A'),right:atom('B')}};
+  assert.equal(formulaProse(identity,x=>x),'(there exists C\\in S such that P(C); and Q(C)) if and only if (A; and B)');
+  const conjunction={kind:'and',left:existence,right:atom('R')};
+  assert.equal(formulaProse(conjunction,x=>x),'(there exists C\\in S such that P(C); and Q(C)); and R');
+});

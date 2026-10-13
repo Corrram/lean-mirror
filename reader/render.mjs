@@ -37,8 +37,14 @@ function relation(formula) {
 // Natural descriptions are determined by formula constructors. Free prose never
 // enters the proof tree. The original source is displayed in its own column.
 export function formulaProse(f, m) {
-  if (f.kind==='iff') return formulaProse(f.left,m)+' if and only if '+formulaProse(f.right,m);
-  if (f.kind==='and') return formulaProse(f.left,m)+'; and '+formulaProse(f.right,m);
+  if (f.kind==='iff') {
+    const scoped=g=>['forall','exists','imp','iff','and'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
+    return scoped(f.left)+' if and only if '+scoped(f.right);
+  }
+  if (f.kind==='and') {
+    const scoped=g=>['forall','exists','imp','iff'].includes(g.kind)?'('+formulaProse(g,m)+')':formulaProse(g,m);
+    return scoped(f.left)+'; and '+scoped(f.right);
+  }
   if (f.kind==='forall') {
     const variable=m(`${f.binding??f.name}\\in ${f.type}`);
     return f.body.kind==='imp' ? `for every ${variable} satisfying ${m(f.body.premise.latex)}, ${formulaProse(f.body.body,m)}` : `for every ${variable}, ${formulaProse(f.body,m)}`;
