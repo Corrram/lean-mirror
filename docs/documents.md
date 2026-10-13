@@ -149,3 +149,8 @@ its definition link.
 The controlled formula language supports `\lor` (inclusive logical “or”).
 Conjunction binds more tightly than disjunction, and disjunction more tightly
 than implication. Both LaTeX and readable prose preserve that scope.
+
+The original-source reader recognizes braced and unbraced LaTeX macro
+declarations and simple undelimited TeX definitions such as `\def\abs#1{...}`
+and `\def\1{...}`. Unsupported unused or mismatched parameters stop the
+build instead of silently changing how many arguments the source consumes.

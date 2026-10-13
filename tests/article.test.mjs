@@ -254,3 +254,57 @@ test('explicit figure row breaks retain the original panel grid',()=>{
   assert.equal((html.match(/<img /g)??[]).length,6);
   assert(html.indexOf('three.png')<html.indexOf('four.png'));
 });
+
+test('simple TeX definitions and unbraced LaTeX declarations retain parameters',()=>{
+  const source=String.raw`\def\1{\mathds{1}}
+\def\abs#1{\left\lvert#1\right\rvert}
+\def\of#1{\left(#1\right)}
+\newcommand\pair[2]{#1+#2}
+\providecommand{\tr}{\operatorname{tr}}
+\renewcommand\pair[2]{#1-#2}
+\begin{document}$\1_{\{t\le v\}},\abs{x},f\of{y},\pair{u}{v},\tr(A)$\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  assert.equal(article.macros['\\pair'],'#1-#2');
+  assert.equal(article.macros['\\abs'],'\\left\\lvert#1\\right\\rvert');
+  assert.match(html,/class="katex"/);
+  for(const block of articleBlocks(article))assert.equal(source.slice(block.start,block.end),block.latex);
+  assert.throws(()=>parseArticle(String.raw`\newcommand\unused[2]{#1}\begin{document}x\end{document}`),/Unsupported unused/);
+});
+
+test('sans-serif prose retains software names and embedded mathematics',()=>{
+  const article=parseArticle(String.raw`\begin{document}The \textsf{R} package and \textsf{$x^2$}.\end{document}`);
+  const html=renderArticle(article);
+  assert.match(html,/font-family:ui-sans-serif,system-ui,sans-serif/);
+  assert.match(html,/>R<\/span>/);
+  assert.match(html,/class="katex"/);
+});
+
+test('explicit page breaks retain following results in the continuous reader',()=>{
+  const source=String.raw`\begin{document}Before.\newpage After.\clearpage\begin{theorem}Still present.\end{theorem}\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  assert.equal((html.match(/class="article-page-break"/g)||[]).length,2);
+  assert.match(html,/After\./);
+  assert.match(html,/Still present\./);
+  for(const block of articleBlocks(article))assert.equal(source.slice(block.start,block.end),block.latex);
+});
+
+test('paragraph headings retain proof order without changing equation counters',()=>{
+  const source=String.raw`\begin{document}\begin{proof}First.\paragraph{1. A calculation}Then $x^2$.\begin{equation}\label{eq:x}x=x\end{equation}\paragraph*{2. Finish}Done.\end{proof}\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  const headings=articleBlocks(article).filter(b=>b.kind==='heading');
+  assert.deepEqual(headings.map(b=>[b.level,b.number,b.title]),[[5,'','1. A calculation'],[5,'','2. Finish']]);
+  assert.equal(article.references['eq:x'].number,'1');
+  assert(html.indexOf('First.')<html.indexOf('1. A calculation'));
+  assert(html.indexOf('1. A calculation')<html.indexOf('2. Finish'));
+  for(const block of articleBlocks(article))assert.equal(source.slice(block.start,block.end),block.latex);
+});
+
+test('bibliography metadata preserves printed authors, mathematical titles and links',()=>{
+  const bib=String.raw`\begin{thebibliography}{1}\bibitem{one}\bibinfo{author}{A. Author}, \bibinfo{year}{2026}. \bibinfo{title}{A bound for $\rho$}. \URLprefix\url{https://example.org/} \DOIprefix\doi{10.1/test}.\end{thebibliography}`;
+  const article=parseArticle(String.raw`\begin{document}See \cite{one}.\end{document}`,bib),html=renderArticle(article);
+  assert.match(html,/A\. Author/);
+  assert.match(html,/2026/);
+  assert.match(html,/A bound for/);
+  assert.match(html,/class="katex"/);
+  assert.match(html,/href="https:\/\/doi.org\/10.1\/test"/);
+});

@@ -51,7 +51,7 @@ function paragraphEnd(text,start) {
         const end=text.indexOf('\\)',i+2);if(end<0)throw new Error('Unclosed source mathematics');
         i=end+1;continue;
       }
-      if(text.startsWith('\\[',i)||text.startsWith('\\begin{',i)||/^\\(?:sub)?section\*?\{|^\\appendix\b/.test(text.slice(i)))return i;
+      if(text.startsWith('\\[',i)||text.startsWith('\\begin{',i)||/^\\(?:sub)?section\*?\{|^\\paragraph\*?\{|^\\appendix\b/.test(text.slice(i)))return i;
       i++;continue;
     }
     if(text[i]==='\n'&&/^\n\s*\n/.test(text.slice(i)))return i;
@@ -163,10 +163,24 @@ export function parseArticle(source,bibliography='') {
   const macros={};
   const preamble=uncomment(source.slice(0,begin));
   const equationWithin=preamble.match(/\\numberwithin\{equation\}\{(section|subsection)\}/)?.[1];
-  for(const match of preamble.matchAll(/\\newcommand\{(\\[A-Za-z]+|\\\d)\}/g)) {
-    const count=optional(source,match.index+match[0].length);
+  function defineMacro(name,count,body) {
+    const used=Math.max(0,...[...body.matchAll(/(?<!\\)#([1-9])/g)].map(m=>Number(m[1])));
+    if(used!==count)throw new Error(`Unsupported unused or mismatched macro parameters: ${name}`);
+    macros[name]=body;
+  }
+  // Both braced and unbraced control sequences are legal LaTeX declarations.
+  for(const match of preamble.matchAll(/\\(?:newcommand|providecommand|renewcommand)\*?\s*(?:\{(\\[A-Za-z]+|\\\d)\}|(\\[A-Za-z]+|\\\d))/g)) {
+    let at=match.index+match[0].length;
+    while(/\s/.test(preamble[at]??'')&&at<preamble.length)at++;
+    const count=optional(preamble,at);
     if(count.value&&!/^[1-9]$/.test(count.value))throw new Error('Unsupported macro arguments');
-    macros[match[1]]=argument(source,count.end).value;
+    defineMacro(match[1]??match[2],Number(count.value||0),argument(preamble,count.end).value);
+  }
+  // Simple undelimited TeX definitions: \def\name#1#2{...} and \def\1{...}.
+  for(const match of preamble.matchAll(/\\def\s*(\\[A-Za-z]+|\\\d)((?:\s*#[1-9])*)\s*(?=\{)/g)) {
+    const parameters=match[2].replace(/\s/g,''),count=parameters.length/2;
+    if(parameters!==Array.from({length:count},(_,i)=>'#'+(i+1)).join(''))throw new Error('Unsupported delimited macro parameters');
+    defineMacro(match[1],count,argument(preamble,match.index+match[0].length).value);
   }
   for(const match of preamble.matchAll(/\\DeclareMathOperator(\*)?\{(\\[A-Za-z]+)\}/g))macros[match[2]]='\\operatorname'+(match[1]??'')+'{'+argument(source,match.index+match[0].length).value+'}';
   const declarations={},counters={};
@@ -213,6 +227,9 @@ export function parseArticle(source,bibliography='') {
         } else block={kind:'layout'};
       } else if(text.startsWith('\\appendix',at)) {
         at+='\\appendix'.length;appendix=true;section=0;subsection=0;block={kind:'layout'};
+      } else if(/^\\paragraph\*?\{/.test(text.slice(at))) {
+        const match=text.slice(at).match(/^\\paragraph\*?\{/),arg=brace(text,at+match[0].length-1);
+        at=arg.end;block={kind:'heading',level:5,number:'',title:arg.value};
       } else if(sectionMatch) {
         const arg=brace(text,at+sectionMatch[0].length-1); at=arg.end;
         const labelMatch=text.slice(at).match(/^\s*\\label\{[^}]+\}/);
@@ -339,7 +356,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }
   function inline(tex) {
     let out='',at=0;
-    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'','qedhere':'','newblock':' '};
+    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'', 'qedhere':'','newblock':' ','DOIprefix':'doi:','URLprefix':'URL: ','ArXivprefix':'arXiv:','newpage':'<span class="article-page-break" style="break-after:page"></span>','clearpage':'<span class="article-page-break" style="break-after:page"></span>' };
     while(at<tex.length) {
       if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
       if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
@@ -360,7 +377,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
           if(!/^\d{4}-\d{2}-\d{2}$/.test(sourceDate)||Number.isNaN(Date.parse(sourceDate+'T00:00:00Z'))||new Date(sourceDate+'T00:00:00Z').toISOString().slice(0,10)!==sourceDate)throw new Error('A pinned sourceDate is required for \\today');
           out+=escape(new Date(sourceDate+'T00:00:00Z').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}));continue;
         }
-        if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(cmd==='textsuperscript'||cmd==='textsubscript'){const arg=argument(tex,at),tag=cmd==='textsuperscript'?'sup':'sub';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
         if(cmd==='\\'){out+='<br>';at=optional(tex,at).end;continue;}
         if([';',',','!',' '].includes(cmd)){out+=' ';continue;}
         if(cmd==='quad'||cmd==='qquad'){out+=' ';continue;}
@@ -368,7 +385,8 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(['Needspace','vspace','hspace','bibliographystyle'].includes(cmd)){at=argument(tex,at).end;continue;}
         if(cmd==='label'){at=argument(tex,at).end;continue;}
         if(cmd==='ref'||cmd==='eqref'){const arg=argument(tex,at),r=article.references[arg.value];if(!r)throw new Error(`Unknown reference ${arg.value}`);out+=`<a href="#${r.id}">${cmd==='eqref'?'('+escape(r.number)+')':escape(r.number)}</a>`;at=arg.end;continue;}
-        if(['emph','textbf','textit','textup','textnormal','texttt','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(['emph','textbf','textit','textup','textnormal','textsf','texttt','path','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}${cmd==='textsf'?' style="font-family:ui-sans-serif,system-ui,sans-serif"':''}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(cmd==='bibinfo'){const field=argument(tex,at),body=argument(tex,field.end);out+=inline(body.value);at=body.end;continue;}
         if(cmd==='enquote'){const arg=argument(tex,at);out+='“'+inline(arg.value)+'”';at=arg.end;continue;}
         if(cmd==='texorpdfstring'){const first=argument(tex,at),second=argument(tex,first.end);out+=inline(first.value);at=second.end;continue;}
         if(cmd==='href'){const href=argument(tex,at),label=argument(tex,href.end);if(!/^(https?:|mailto:)/.test(href.value))throw new Error('Invalid source hyperlink');out+=`<a href="${escape(href.value)}">${inline(label.value)}</a>`;at=label.end;continue;}
