@@ -354,3 +354,20 @@ test('author thanks preserve affiliation notes and native letters',()=>{
   assert(html.indexOf('article-author-note-1"')<html.indexOf('class="article-contents"'));
   assert.throws(()=>renderArticle(parseArticle(document(String.raw`\thanks{Unplaced note}`))),/outside the author field/);
 });
+
+
+test('decorated coefficient definitions take precedence over the underlying coefficient',()=>{
+  const source=String.raw`\documentclass{article}
+\begin{document}
+\begin{equation}\label{rho}\rho(C)=0\end{equation}
+\begin{equation}\label{upper}\overline{\rho}(x)=1\end{equation}
+\begin{equation}\label{lower}\underline{\rho}(x)=-1\end{equation}
+$\rho(C)$, $\overline\rho(x)$ and $\underline{\rho}(x)$.
+\end{document}`;
+  const html=renderArticle(parseArticle(source),{definitions:{'\\rho':{label:'rho'},'\\overline{\\rho}':{label:'upper'},'\\underline{\\rho}':{label:'lower'}}});
+  assert.match(html,/href="#article-upper"/);assert.match(html,/href="#article-lower"/);
+  const paragraph=html;
+  assert.equal((paragraph.match(/href="#article-rho"/g)||[]).length,4);
+  assert.equal((paragraph.match(/href="#article-upper"/g)||[]).length,4);
+  assert.equal((paragraph.match(/href="#article-lower"/g)||[]).length,4);
+});

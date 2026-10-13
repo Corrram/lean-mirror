@@ -360,6 +360,8 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     const escaped=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
     const patterns=commandMap.map(([key])=>{
       if(/^\\[A-Za-z]+$/.test(key))return escaped(key);
+      const decorated=key.match(/^\\(check|hat|widehat|tilde|widetilde|bar|overline|underline|vec|dot|ddot|breve|acute|grave)\{(\\[A-Za-z]+)\}$/);
+      if(decorated)return escaped('\\'+decorated[1])+'\\s*(?:\\{\\s*'+escaped(decorated[2])+'\\s*\\}|'+escaped(decorated[2])+'(?![A-Za-z]))';
       if(!/^[A-Za-z]+(?:_[A-Za-z0-9]+)?$/.test(key))throw new Error('Unsupported definition notation '+key);
       const [name,subscript]=key.split('_');
       return escaped(name)+(subscript?'_(?:'+escaped(subscript)+'|\\{'+escaped(subscript)+'\\})':'');
@@ -370,7 +372,9 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       if(/[A-Za-z]/.test(input[offset+symbol.length]??''))return symbol;
       if(!symbol.startsWith('\\')&&/[A-Za-z\\]/.test(input[offset-1]??''))return symbol;
       const key=symbol.replace(accent,'').replace(/_\{([A-Za-z0-9]+)\}$/,'_$1');
-      const def=definitions[key],id=article.references[def.label]?.id??def.id;
+      const decorated=symbol.replace(/\s+/g,'').match(/^\\(check|hat|widehat|tilde|widetilde|bar|overline|underline|vec|dot|ddot|breve|acute|grave)(?:\{(\\[A-Za-z]+)\}|(\\[A-Za-z]+))$/);
+      const decoratedKey=decorated?'\\'+decorated[1]+'{'+(decorated[2]??decorated[3])+'}':null;
+      const def=(decoratedKey&&definitions[decoratedKey])||definitions[key],id=article.references[def.label]?.id??def.id;
       return `{\\href{#${id}}{${symbol}}}`;
     });
     return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:{'\\mathds':'\\mathbb{#1}',...article.macros},trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});

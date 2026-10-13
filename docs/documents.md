@@ -163,3 +163,7 @@ the reader displays the selected cross-reference. A binding for a repeated
 label also requires its own `occurrence`; the cross-reference choice does not
 silently choose which mathematical passage receives evidence. Unknown, stale
 and out-of-range choices stop the build. The source is never rewritten.
+
+Decorated coefficient keys such as `\overline{\rho}` and `\underline{\rho}`
+may have their own definition links, taking precedence over `\rho`. Both braced
+and single-token TeX spellings resolve to the decorated definition.
