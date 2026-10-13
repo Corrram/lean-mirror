@@ -184,3 +184,18 @@ Use $L_b(u)$ and $L_{b}(v)$; $XL_b$ is a different name.`));
   assert.equal((html.match(/<a href="#article-eq-L"/g)??[]).length,3);
   assert.throws(()=>renderArticle(article,{definitions:{'L+X':{label:'eq:L'}}}),/Unsupported definition notation/);
 });
+
+
+test('definition links preserve unbraced accents and single-token operands',()=>{
+  const source=String.raw`\documentclass{article}
+\begin{document}
+\begin{equation}\label{def:L}L_b(u,v)=uv\end{equation}
+$\check L_b$, $\hat{L_b}$, $x^{L_b}$ and $x^\xi$.
+\begin{equation}\label{def:xi}\xi(C)=0\end{equation}
+\end{document}`;
+  const article=parseArticle(source);
+  const html=renderArticle(article,{definitions:{L_b:{label:'def:L'},'\\xi':{label:'def:xi'}}});
+  assert.match(html,/href="#article-def-L"/);
+  assert.match(html,/href="#article-def-xi"/);
+  assert.match(html,/class="accent/);
+});

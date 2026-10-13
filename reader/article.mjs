@@ -320,13 +320,14 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       const [name,subscript]=key.split('_');
       return escaped(name)+(subscript?'_(?:'+escaped(subscript)+'|\\{'+escaped(subscript)+'\\})':'');
     });
-    const re=patterns.length?new RegExp(patterns.join('|'),'g'):null;
+    const accent=/^(?:\\(?:check|hat|widehat|tilde|widetilde|bar|overline|underline|vec|dot|ddot|breve|acute|grave)\s*)*/;
+    const re=patterns.length?new RegExp(accent.source.slice(1)+'(?:'+patterns.join('|')+')','g'):null;
     if(re)tex=tex.replace(re,(symbol,offset,input)=>{
       if(/[A-Za-z]/.test(input[offset+symbol.length]??''))return symbol;
       if(!symbol.startsWith('\\')&&/[A-Za-z\\]/.test(input[offset-1]??''))return symbol;
-      const key=symbol.replace(/_\{([A-Za-z0-9]+)\}$/,'_$1');
+      const key=symbol.replace(accent,'').replace(/_\{([A-Za-z0-9]+)\}$/,'_$1');
       const def=definitions[key],id=article.references[def.label]?.id??def.id;
-      return `\\href{#${id}}{${symbol}}`;
+      return `{\\href{#${id}}{${symbol}}}`;
     });
     return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:article.macros,trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
   }
