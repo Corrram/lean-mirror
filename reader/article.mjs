@@ -120,11 +120,12 @@ export function articleBlocks(article) {
 export function resolveBindings(article,bindings) {
   const blocks=articleBlocks(article),annotations={};
   for(const binding of bindings) {
+    if(binding.role&&!['counterpart','refutation'].includes(binding.role))throw new Error(`Unknown source binding role: ${binding.role}`);
     const candidates=blocks.filter(b=>binding.label?b.labels.includes(binding.label):b.kind===binding.kind&&b.latex.includes(binding.quote));
     if(candidates.length!==1)throw new Error(`Source binding must match exactly once: ${binding.label??binding.quote} (${candidates.length})`);
     const b=candidates[0];
     annotations[b.id]??=[];
-    for(const declaration of binding.declarations)annotations[b.id].push({declaration,title:binding.title,note:binding.note});
+    for(const declaration of binding.declarations)annotations[b.id].push({declaration,title:binding.title,note:binding.note,role:binding.role??'counterpart'});
   }
   return annotations;
 }
@@ -340,7 +341,8 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   function checked(b) {
     const items=annotations[b.id]??b.labels.flatMap(l=>annotations[l]??[]);
     if(!items.length)return '';
-    return `<details class="article-evidence"><summary>Open verification (${items.length})</summary>${items.map(item=>{
+    const refutation=items.some(item=>item.role==='refutation');
+    return `<details class="article-evidence${refutation?' article-refutation':''}"><summary>${refutation?'Printed claim refuted · Open checked correction':'Open verification'} (${items.length})</summary>${items.map(item=>{
       const record=evidence[item.declaration];if(!record)throw new Error(`Missing compiled evidence ${item.declaration}`);
       return `<section><h4>${escape(item.title??'Checked mathematical counterpart')}</h4><p><a href="${escape(certificateURL(record))}">${escape(record.declaration)}</a></p><pre><code>${escape(record.type)}</code></pre>${item.note?`<p>${escape(item.note)}</p>`:''}</section>`;
     }).join('')}${proofDetails(b,items,m)}</details>`;

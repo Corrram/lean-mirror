@@ -37,6 +37,14 @@ test('bindings must identify exactly one original source passage',()=>{
   assert.equal(Object.values(resolveBindings(article,bindings))[0][0].declaration,'Example.square_nonneg');
   assert.throws(()=>resolveBindings(article,[{label:'missing',declarations:[]}]),/exactly once/);
   assert.throws(()=>resolveBindings(article,[{quote:'x',kind:'paragraph',declarations:[]}]),/exactly once/);
+  assert.throws(()=>resolveBindings(article,[{label:'thm:positive',role:'certified-original',declarations:[]}]),/Unknown source binding role/);
+});
+
+test('a compiled counterexample is visibly distinguished from a source theorem link',()=>{
+  const article=parseArticle(manuscript);
+  const annotations=resolveBindings(article,[{label:'thm:positive',role:'refutation',declarations:['Example.counterexample']}]);
+  const html=renderArticle(article,{annotations,evidence:{'Example.counterexample':{declaration:'Example.counterexample',type:'¬ PrintedClaim'}}});
+  assert.match(html,/class="article-evidence article-refutation"/);assert.match(html,/Printed claim refuted · Open checked correction/);
 });
 
 test('duplicate labels and anchor collisions cannot hide a passage',()=>{
