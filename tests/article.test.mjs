@@ -219,3 +219,11 @@ test('mathtools multiline subexpressions retain each original mathematical row',
   assert.equal(article.blocks[0].body.includes('\\begin{multlined}'),true);
   assert.match(html,/class="mtable"/);assert.match(html,/>3</);
 });
+
+
+test('quoted proof directions retain their mathematical content and quotation marks',()=>{
+  const source=String.raw`\begin{document}\enquote{\emph{$\Rightarrow$}}. An argument.\end{document}`;
+  const html=renderArticle(parseArticle(source));
+  assert.match(html,/“<em>/);assert.match(html,/<\/em>”/);
+  assert.match(html,/An argument/);assert.match(html,/⇒/);
+});

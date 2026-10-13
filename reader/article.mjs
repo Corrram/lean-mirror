@@ -364,6 +364,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(cmd==='label'){at=argument(tex,at).end;continue;}
         if(cmd==='ref'||cmd==='eqref'){const arg=argument(tex,at),r=article.references[arg.value];if(!r)throw new Error(`Unknown reference ${arg.value}`);out+=`<a href="#${r.id}">${cmd==='eqref'?'('+escape(r.number)+')':escape(r.number)}</a>`;at=arg.end;continue;}
         if(['emph','textbf','textit','textup','textnormal','texttt','mbox','mathrm','nolinkurl','natexlab'].includes(cmd)){const arg=argument(tex,at);const tag=cmd==='emph'||cmd==='textit'?'em':cmd==='textbf'?'strong':cmd==='texttt'?'code':'span';out+=`<${tag}>${inline(arg.value)}</${tag}>`;at=arg.end;continue;}
+        if(cmd==='enquote'){const arg=argument(tex,at);out+='“'+inline(arg.value)+'”';at=arg.end;continue;}
         if(cmd==='texorpdfstring'){const first=argument(tex,at),second=argument(tex,first.end);out+=inline(first.value);at=second.end;continue;}
         if(cmd==='href'){const href=argument(tex,at),label=argument(tex,href.end);if(!/^(https?:|mailto:)/.test(href.value))throw new Error('Invalid source hyperlink');out+=`<a href="${escape(href.value)}">${inline(label.value)}</a>`;at=label.end;continue;}
         if(cmd==='url'){const arg=argument(tex,at);if(!/^https?:/.test(arg.value))throw new Error('Invalid source URL');out+=`<a href="${escape(arg.value)}">${escape(arg.value)}</a>`;at=arg.end;continue;}
