@@ -310,6 +310,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
   }
   function m(tex,display=false) {
     tex=uncomment(tex).replace(/\\label\{[^}]+\}/g,'').replace(/\\allowdisplaybreaks(?:\[[0-4]\])?|\\qedhere\b/g,'');
+    tex=tex.replace(/\\begin\{multlined\}/g,'\\begin{gathered}').replace(/\\end\{multlined\}/g,'\\end{gathered}');
     if(/\\(?:href|url|html[A-Za-z]*|includegraphics)\b/.test(tex))throw new Error('Source math cannot supply presentation links or HTML');
     // Link lexical symbols; never nest links around their arguments.
     const commandMap=Object.entries(definitions).sort((a,b)=>b[0].length-a[0].length);

@@ -209,3 +209,13 @@ $\1_{\{x\le y\}}$ and $\mathds{R}$.\end{document}`;
   assert.match(html,/class="katex"/);
   assert.equal(article.macros['\\1'],String.raw`\mathds{1}`);
 });
+
+
+test('mathtools multiline subexpressions retain each original mathematical row',()=>{
+  const source=String.raw`\begin{document}\begin{equation}\label{eq:split}
+\begin{multlined}f(x)=x^2+1\\+x^3\end{multlined}\end{equation}\end{document}`;
+  const article=parseArticle(source),html=renderArticle(article);
+  assert.equal(article.references['eq:split'].number,'1');
+  assert.equal(article.blocks[0].body.includes('\\begin{multlined}'),true);
+  assert.match(html,/class="mtable"/);assert.match(html,/>3</);
+});
