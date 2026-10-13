@@ -417,3 +417,40 @@ test('the standard article title uses the inspected pinned date when LaTeX defau
   // Without an inspected source date the reader must not invent today's date.
   assert(!renderArticle(parseArticle(source)).includes('class="article-date"'));
 });
+
+
+test('third-level headings preserve their counters and reset within sections',()=>{
+  const source=String.raw`\begin{document}\section{Main}\subsection{A}\subsubsection{First}\label{first}Body.\subsubsection{Second}More.\subsection{B}\subsubsection{Third}Done.\appendix\section{Proofs}\subsection{Cases}\subsubsection{End}\end{document}`;
+  const article=parseArticle(source),heads=articleBlocks(article).filter(b=>b.kind==='heading');
+  assert.deepEqual(heads.map(b=>b.number),['1','1.1','1.1.1','1.1.2','1.2','1.2.1','A','A.1','A.1.1']);
+  assert.equal(article.references.first.number,'1.1.1');
+  assert.match(renderArticle(article),/<h4[^>]*>1\.1\.1\. First<\/h4>/);
+  for(const b of articleBlocks(article))assert.equal(source.slice(b.start,b.end),b.latex);
+});
+
+test('multiple captions in a float keep separate figures and ignore commented image commands',()=>{
+  const source=String.raw`\begin{document}\tableofcontents\begin{figure}\centering\includegraphics{a.png}
+%\includegraphics{hidden.png}
+\caption{First}\label{fig:a}\\[1em]\includegraphics{b.png}\includegraphics{c.png}\caption{Second}\label{fig:b}\end{figure}\begin{figure}\includegraphics{d.png}\caption{Third}\label{fig:d}\end{figure}\end{document}`;
+  const article=parseArticle(source),figures=articleBlocks(article).filter(b=>b.kind==='figure');
+  assert.deepEqual(figures.map(b=>[b.number,b.caption,b.images.map(i=>i.image)]),[['1','First',['a.png']],['2','Second',['b.png','c.png']],['3','Third',['d.png']]]);
+  assert.equal(article.references['fig:b'].number,'2');assert.equal(article.references['fig:d'].number,'3');
+  const html=renderArticle(article);assert.equal((html.match(/<img /g)||[]).length,4);assert.match(html,/Figure 2\./);assert.match(html,/Second/);
+  assert(!html.includes('hidden.png'));
+  for(const b of articleBlocks(article))assert.equal(source.slice(b.start,b.end),b.latex);
+});
+
+
+test('table markers retain check and cross meanings in prose and math without becoming verification claims',()=>{
+  const source=String.raw`\newcommand{\yes}{\color{green}{\ding{51}}\color{black}}\newcommand{\no}{\color{red}{\ding{55}}\color{black}}\newcommand{\conv}{{\scalebox{1.5}{\raisebox{-0.2ex}{$\ast$}}}}\begin{document}w.l.o.g.\@ $A\conv B$.\begin{table}\begin{tabular}{ll}\yes & $\text{\no}^*$\\\end{tabular}\caption{Numerical markers}\end{table}\end{document}`;
+  const html=renderArticle(parseArticle(source));assert.match(html,/✓/);assert.match(html,/×/);assert.match(html,/Numerical markers/);assert.match(html,/class="katex"/);
+  assert(!html.includes('Open verification'));assert(!html.includes('undefined'));
+  assert.throws(()=>renderArticle(parseArticle(document('$\\ding{99}$'))),/Unsupported dingbat/);
+});
+
+
+test('equation references inside mathematics retain their printed numbers and local links',()=>{
+  const source=String.raw`\begin{document}\begin{align}a=a\label{first}\\b=b\label{second}\end{align}\[\eqref{second}\geq\eqref{first},\quad\text{by }\ref{first}\]\end{document}`;
+  const html=renderArticle(parseArticle(source));assert.match(html,/href="#article-second"/);assert.match(html,/\\text\{\(2\)\}/);assert.match(html,/\\text\{\(1\)\}/);
+  assert.throws(()=>renderArticle(parseArticle(document('$\\eqref{unknown}$'))),/Unknown reference unknown/);
+});

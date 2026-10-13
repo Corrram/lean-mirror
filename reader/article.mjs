@@ -51,7 +51,7 @@ function paragraphEnd(text,start) {
         const end=text.indexOf('\\)',i+2);if(end<0)throw new Error('Unclosed source mathematics');
         i=end+1;continue;
       }
-      if(text.startsWith('\\[',i)||text.startsWith('\\begin{',i)||/^\\(?:sub)?section\*?\{|^\\paragraph\*?\{|^\\appendix\b/.test(text.slice(i)))return i;
+      if(text.startsWith('\\[',i)||text.startsWith('\\begin{',i)||/^\\(?:subsub|sub)?section\*?\{|^\\paragraph\*?\{|^\\appendix\b/.test(text.slice(i)))return i;
       i++;continue;
     }
     if(text[i]==='\n'&&/^\n\s*\n/.test(text.slice(i)))return i;
@@ -202,7 +202,7 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
   }
   const getMeta=command=>{const m=source.match(new RegExp('\\\\'+command+'\\{'));return m?brace(source,m.index+m[0].length-1).value:'';};
   const article={title:getMeta('title'),author:getMeta('author'),date:getMeta('date'),implicitDate:/\\documentclass(?:\[[^\]]*\])?\{article\}/.test(preamble)&&!/\\date\s*\{/.test(preamble),macros,blocks:[],references:{},bibliography:[]};
-  let section=0,subsection=0,equation=0,figure=0,table=0,serial=0,appendix=false;
+  let section=0,subsection=0,subsubsection=0,equation=0,figure=0,table=0,serial=0,appendix=false;
   function equationNumber(){
     const prefix=equationWithin?(appendix?String.fromCharCode(64+section):String(section))+(equationWithin==='subsection'?'.'+subsection:''):'';
     return [prefix,String(++equation)].filter(Boolean).join('.');
@@ -213,7 +213,7 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
       if(/\s/.test(text[at])) {at++;continue;}
       if(text[at]==='%') {at=text.indexOf('\n',at);if(at<0)break;continue;}
       const start=at;
-      const sectionMatch=text.slice(at).match(/^\\(section|subsection)(\*)?\{/);
+      const sectionMatch=text.slice(at).match(/^\\(section|subsection|subsubsection)(\*)?\{/);
       let block;
       if(text.startsWith('\\twocolumn',at)) {
         at+='\\twocolumn'.length;
@@ -230,7 +230,7 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
           block={kind:'wide',children:parse(body,base+offset)};at=option.end;
         } else block={kind:'layout'};
       } else if(text.startsWith('\\appendix',at)) {
-        at+='\\appendix'.length;appendix=true;section=0;subsection=0;block={kind:'layout'};
+        at+='\\appendix'.length;appendix=true;section=0;subsection=0;subsubsection=0;block={kind:'layout'};
       } else if(/^\\paragraph\*?\{/.test(text.slice(at))) {
         const match=text.slice(at).match(/^\\paragraph\*?\{/),arg=brace(text,at+match[0].length-1);
         at=arg.end;block={kind:'heading',level:5,number:'',title:arg.value};
@@ -238,12 +238,12 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
         const arg=brace(text,at+sectionMatch[0].length-1); at=arg.end;
         const labelMatch=text.slice(at).match(/^\s*\\label\{[^}]+\}/);
         if(labelMatch)at+=labelMatch[0].length;
-        if(!sectionMatch[2]){if(sectionMatch[1]==='section'){section++;subsection=0;}else subsection++;}
+        if(!sectionMatch[2]){if(sectionMatch[1]==='section'){section++;subsection=0;subsubsection=0;}else if(sectionMatch[1]==='subsection'){subsection++;subsubsection=0;}else subsubsection++;}
         if(!sectionMatch[2]&&equationWithin&&(sectionMatch[1]==='section'||equationWithin==='subsection'))equation=0;
         for(const [kind,d] of Object.entries(declarations))if(!sectionMatch[2]&&kind===d.counter&&((sectionMatch[1]==='section'&&['section','subsection'].includes(d.within))||(sectionMatch[1]==='subsection'&&d.within==='subsection')))counters[kind]=0;
         if(!Object.keys(declarations).length&&sectionMatch[1]==='section')counters.theorem=0;
         const sectionNumber=appendix?String.fromCharCode(64+section):String(section);
-        block={kind:'heading',level:sectionMatch[1]==='section'?2:3,number:sectionMatch[2]?'':sectionMatch[1]==='section'?sectionNumber:`${sectionNumber}.${subsection}`,title:arg.value};
+        block={kind:'heading',level:sectionMatch[1]==='section'?2:sectionMatch[1]==='subsection'?3:4,number:sectionMatch[2]?'':sectionMatch[1]==='section'?sectionNumber:sectionMatch[1]==='subsection'?`${sectionNumber}.${subsection}`:`${sectionNumber}.${subsection}.${subsubsection}`,title:arg.value};
       } else if(text.startsWith('\\begin{',at)) {
         const env=environment(text,at);at=env.end;
         if(mathEnvs.has(env.kind)) {
@@ -262,15 +262,31 @@ export function parseArticle(source,bibliography='',{referenceChoices={}}={}) {
           const width=argument(env.body,0);
           block={kind:'minipage',children:parse(env.body.slice(width.end),base+start+text.slice(start,at).indexOf(env.body)+width.end)};
         } else if(env.kind==='figure'||env.kind==='figure*') {
-          let imageRow=0,imageEnd=0;
-          const images=[...env.body.matchAll(/\\includegraphics(?:\[([^\]]*)\])?\{([^}]+)\}/g)].map(m=>{
-            if(/\\\\/.test(uncomment(env.body.slice(imageEnd,m.index))))imageRow++;
-            imageEnd=m.index+m[0].length;
-            return {image:m[2],options:m[1]??'',row:imageRow};
-          });
-          const caption=env.body.match(/\\caption\{/);
-          if(!images.length||!caption)throw new Error('Incomplete figure');
-          block={kind:'figure',number:String(++figure),image:images[0].image,images,caption:brace(env.body,caption.index+caption[0].length-1).value};
+          const visible=uncomment(env.body),captions=[...visible.matchAll(/\\caption\{/g)];
+          if(!captions.length)throw new Error('Incomplete figure');
+          const bodyOffset=base+start+text.slice(start,at).indexOf(env.body);
+          const children=[];let segmentStart=0;
+          for(let ci=0;ci<captions.length;ci++){
+            const caption=captions[ci],arg=brace(env.body,caption.index+caption[0].length-1);
+            const nextImage=visible.slice(arg.end).search(/\\includegraphics(?:\[[^\]]*\])?\{/);
+            const segmentEnd=ci===captions.length-1?env.body.length:arg.end+nextImage;
+            if(ci<captions.length-1&&(nextImage<0||segmentEnd>=captions[ci+1].index))throw new Error('Each caption must have its own figure images');
+            const segment=env.body.slice(segmentStart,segmentEnd),segmentVisible=visible.slice(segmentStart,segmentEnd);
+            let imageRow=0,imageEnd=0;
+            const images=[...segmentVisible.matchAll(/\\includegraphics(?:\[([^\]]*)\])?\{([^}]+)\}/g)].map(m=>{
+              if(/\\\\/.test(segmentVisible.slice(imageEnd,m.index)))imageRow++;
+              imageEnd=m.index+m[0].length;
+              return {image:m[2],options:m[1]??'',row:imageRow};
+            });
+            if(!images.length)throw new Error('Incomplete figure');
+            const childStart=ci===0?base+start:bodyOffset+segmentStart;
+            const childEnd=ci===captions.length-1?base+at:bodyOffset+segmentEnd;
+            children.push({kind:'figure',number:String(++figure),image:images[0].image,images,caption:arg.value,
+              id:`passage-${++serial}`,start:childStart,end:childEnd,latex:source.slice(childStart,childEnd),labels:labels(segment)});
+            segmentStart=segmentEnd;
+          }
+          if(children.length===1){block=children[0];serial--;}
+          else block={kind:'figureGroup',children};
         } else if(env.kind==='table'||env.kind==='table*') {
           const tabularStart=env.body.indexOf('\\begin{tabular');
           if(tabularStart<0)throw new Error('Unsupported table body');
@@ -362,6 +378,11 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     tex=uncomment(tex).replace(/\\label\{[^}]+\}/g,'').replace(/\\allowdisplaybreaks(?:\[[0-4]\])?|\\qedhere\b/g,'');
     tex=tex.replace(/\\begin\{multlined\}/g,'\\begin{gathered}').replace(/\\end\{multlined\}/g,'\\end{gathered}');
     if(/\\(?:href|url|html[A-Za-z]*|includegraphics)\b/.test(tex))throw new Error('Source math cannot supply presentation links or HTML');
+    tex=tex.replace(/\\(eqref|ref)\{([^}]+)\}/g,(_match,kind,label)=>{
+      const ref=article.references[label];if(!ref)throw new Error('Unknown reference '+label);
+      const number=kind==='eqref'?'('+ref.number+')':ref.number;
+      return '{\\href{#'+ref.id+'}{\\text{'+number+'}}}';
+    });
     // Link lexical symbols; never nest links around their arguments.
     const commandMap=Object.entries(definitions).sort((a,b)=>b[0].length-a[0].length);
     const escaped=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -384,12 +405,14 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
       const def=(decoratedKey&&definitions[decoratedKey])||definitions[key],id=article.references[def.label]?.id??def.id;
       return `{\\href{#${id}}{${symbol}}}`;
     });
-    return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:{'\\mathds':'\\mathbb{#1}',...article.macros},trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
+    return katex.renderToString(tex,{displayMode:display,throwOnError:true,strict:'ignore',macros:{'\\mathds':'\\mathbb{#1}','\\scalebox':'\\@secondoftwo',
+        '\\ding':context=>{const tokens=context.consumeArgs(1)[0],code=[...tokens].reverse().map(t=>t.text).join('');
+          const marker={'51':'✓','55':'✗'}[code];if(!marker)throw new Error('Unsupported dingbat '+code);return context.mode==='text'?(code==='51'?'$\\checkmark$':'$\\times$'):(code==='51'?'\\checkmark':'\\times');},...article.macros},trust:ctx=>ctx.command==='\\href'&&knownAnchors.has(ctx.url?.slice(1))});
   }
   const authorNotes=[];let inAuthor=false;
   function inline(tex) {
     let out='',at=0;
-    const simple={'maketitle':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'', 'qedhere':'','newblock':' ','DOIprefix':'doi:','URLprefix':'URL: ','ArXivprefix':'arXiv:','newpage':'<span class="article-page-break" style="break-after:page"></span>','ss':'ß','SS':'ẞ','ae':'æ','AE':'Æ','oe':'œ','OE':'Œ','o':'ø','O':'Ø','l':'ł','L':'Ł','clearpage':'<span class="article-page-break" style="break-after:page"></span>' };
+    const simple={'maketitle':'','tableofcontents':'','@':'','centering':'','small':'','normalsize':'','footnotesize':'','scriptsize':'','large':'','Large':'','LARGE':'','huge':'','Huge':'','bfseries':'','raggedright':'','itshape':'','upshape':'','em':'','par':'<br>','noindent':'','smallskip':'','medskip':'','bigskip':'','nopagebreakhere':'','leavevmode':'', 'qedhere':'','newblock':' ','DOIprefix':'doi:','URLprefix':'URL: ','ArXivprefix':'arXiv:','newpage':'<span class="article-page-break" style="break-after:page"></span>','ss':'ß','SS':'ẞ','ae':'æ','AE':'Æ','oe':'œ','OE':'Œ','o':'ø','O':'Ø','l':'ł','L':'Ł','clearpage':'<span class="article-page-break" style="break-after:page"></span>' };
     while(at<tex.length) {
       if(tex[at]==='$') {const delimiter=tex.startsWith('$$',at)?'$$':'$';const end=tex.indexOf(delimiter,at+delimiter.length);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+delimiter.length,end),delimiter==='$$');at=end+delimiter.length;continue;}
       if(tex.startsWith('\\(',at)){const end=tex.indexOf('\\)',at+2);if(end<0)throw new Error('Unclosed inline math');out+=m(tex.slice(at+2,end));at=end+2;continue;}
@@ -428,6 +451,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(cmd==='doi'){const arg=argument(tex,at);out+=`<a href="https://doi.org/${escape(arg.value)}">doi: ${escape(arg.value)}</a>`;at=arg.end;continue;}
         if(cmd.startsWith('cite')){const first=optional(tex,at),second=optional(tex,first.end),arg=argument(tex,second.end);out+='['+arg.value.split(',').map(key=>{const b=article.bibliography.find(b=>b.key===key.trim());if(!b)throw new Error(`Missing citation ${key}`);return `<a href="#bib-${escape(b.key)}">${b.number}</a>`;}).join(', ')+(first.value?', '+inline(first.value):'')+(second.value?', '+inline(second.value):'')+']';at=arg.end;continue;}
         if(cmd==='bibliography'){at=argument(tex,at).end;continue;}
+        if(cmd==='phantom'||cmd==='hphantom'){const arg=argument(tex,at);out+='<span aria-hidden="true" style="visibility:hidden">'+inline(arg.value)+'</span>';at=arg.end;continue;}
         if(cmd==='keywords'){const arg=argument(tex,at);out+='<strong>Keywords:</strong> '+inline(arg.value);at=arg.end;continue;}
         if(cmd==='thanks'){
           if(!inAuthor)throw new Error('Author note outside the author field');
@@ -445,6 +469,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
         if(['\'','`','"','^','~','c','v','H'].includes(cmd)){const arg=tex[at]==='{'?brace(tex,at):{value:tex[at],end:at+1};const marks={"'":'\u0301','`':'\u0300','"':'\u0308','^':'\u0302','~':'\u0303',c:'\u0327',v:'\u030c',H:'\u030b'};out+=escape((arg.value+marks[cmd]).normalize('NFC'));at=arg.end;continue;}
         if(cmd==='textendash'||cmd==='textemdash'){out+=cmd==='textendash'?'–':'—';continue;}
         if(cmd==='and'){out+=' and ';continue;}
+        if(Object.hasOwn(article.macros,'\\'+cmd)&&!/#\d/.test(article.macros['\\'+cmd])){out+=m('\\'+cmd);continue;}
         throw new Error(`Unsupported article prose command \\${cmd}: ${tex.slice(at-30,at+45)}`);
       }
       const char=tex[at++];if(char==='{'||char==='}')continue;
@@ -485,7 +510,7 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
     if(b.kind==='proof')return `<section class="article-proof" ${attrs}><h4>${b.title?inline(b.title):'Proof.'}</h4>${blocksHTML(b.children)}<span class="article-qed">□</span>${checked(b)}</section>`;
     if(b.kind==='abstract')return `<section class="article-abstract" ${attrs}><h2>Abstract</h2>${blocksHTML(b.children)}</section>`;
     if(b.kind==='center')return `<div class="article-affiliation" ${attrs}>${blocksHTML(b.children)}</div>`;
-    if(b.kind==='wide')return `<div class="article-wide-title" ${attrs}>${blocksHTML(b.children)}</div>`;
+    if(b.kind==='wide'||b.kind==='figureGroup')return `<div class="article-wide-title" ${attrs}>${blocksHTML(b.children)}</div>`;
     if(['samepage','centering','minipage'].includes(b.kind))return `<div ${attrs}>${blocksHTML(b.children)}</div>`;
     if(b.kind==='figure') {
       const rows=Object.values(Object.groupBy(b.images,image=>image.row??0));
