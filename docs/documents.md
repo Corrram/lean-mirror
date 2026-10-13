@@ -167,3 +167,15 @@ and out-of-range choices stop the build. The source is never rewritten.
 Decorated coefficient keys such as `\overline{\rho}` and `\underline{\rho}`
 may have their own definition links, taking precedence over `\rho`. Both braced
 and single-token TeX spellings resolve to the decorated definition.
+
+The article reader supports explicit shared author affiliation marks. A
+`\footnotemark[n]` in the author field must reference an earlier `\thanks`
+note; unresolved marks stop the build.
+
+`reader/figures.mjs` resolves source figures without changing their original
+graphic arguments. A PDF or macro-containing argument requires an explicit
+rendering entry, with safe relative source and rendering paths, both SHA-256
+hashes, renderer version, page and DPI. Both files must already occur in the
+pinned asset manifest. Direct browser-image originals remain source-pinned.
+Unknown entries and colliding output filenames stop the build. This checks
+provenance, not the mathematical correctness of plotted data.

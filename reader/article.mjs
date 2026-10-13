@@ -427,6 +427,11 @@ export function renderArticle(article,{annotations={},evidence={},definitions={}
           const note={id:'article-author-note-'+(authorNotes.length+1),marker,body:arg.value};
           authorNotes.push(note);out+=`<sup><a href="#${note.id}">${marker}</a></sup>`;at=arg.end;continue;
         }
+        if(cmd==='footnotemark'){
+          const number=optional(tex,at),index=Number(number.value);
+          if(!inAuthor||!/^\d+$/.test(number.value)||index<1||index>authorNotes.length)throw new Error('Unresolved author footnote mark');
+          const note=authorNotes[index-1];out+=`<sup><a href="#${note.id}">${note.marker}</a></sup>`;at=number.end;continue;
+        }
         if(cmd==='footnote'){const arg=argument(tex,at);out+=`<span class="article-footnote">(${inline(arg.value)})</span>`;at=arg.end;continue;}
         if(['%','&','_','#','$','{','}'].includes(cmd)){out+=escape(cmd);continue;}
         if(['\'','`','"','^','~','c','v','H'].includes(cmd)){const arg=tex[at]==='{'?brace(tex,at):{value:tex[at],end:at+1};const marks={"'":'\u0301','`':'\u0300','"':'\u0308','^':'\u0302','~':'\u0303',c:'\u0327',v:'\u030c',H:'\u030b'};out+=escape((arg.value+marks[cmd]).normalize('NFC'));at=arg.end;continue;}

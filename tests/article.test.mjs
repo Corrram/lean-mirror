@@ -371,3 +371,13 @@ $\rho(C)$, $\overline\rho(x)$ and $\underline{\rho}(x)$.
   assert.equal((paragraph.match(/href="#article-upper"/g)||[]).length,4);
   assert.equal((paragraph.match(/href="#article-lower"/g)||[]).length,4);
 });
+
+
+test('shared author footnote marks reuse an existing affiliation explicitly',()=>{
+  const source=String.raw`\documentclass{article}\author{A\thanks{Department one}\and B\thanks{Department two}\and C\footnotemark[1]}\begin{document}\maketitle Text.\end{document}`;
+  const html=renderArticle(parseArticle(source));
+  assert.equal((html.match(/href="#article-author-note-1"/g)||[]).length,2);
+  assert.equal((html.match(/id="article-author-note-1"/g)||[]).length,1);
+  for(const mark of ['3','0','x',''])assert.throws(()=>renderArticle(parseArticle(source.replace('[1]','['+mark+']'))),/Unresolved author footnote/);
+  assert.throws(()=>renderArticle(parseArticle(String.raw`\documentclass{article}\begin{document}\footnotemark[1]\end{document}`)),/Unresolved author footnote/);
+});
